@@ -16,6 +16,7 @@ import com.tms.thesissystem.domain.model.User;
 import com.tms.thesissystem.domain.model.UserRole;
 import com.tms.thesissystem.domain.model.WeeklyTask;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Connection;
@@ -36,6 +37,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Repository
+@ConditionalOnProperty(name = "app.database.enabled", havingValue = "true", matchIfMissing = true)
 public class InMemoryWorkflowRepository implements WorkflowRepository {
     private static final long STUDENT_OFFSET = 100_000L;
     private static final long TEACHER_OFFSET = 200_000L;

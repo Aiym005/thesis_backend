@@ -19,74 +19,76 @@ import java.util.List;
 public class WorkflowController {
     private final WorkflowQueryService queryService;
     private final WorkflowCommandService commandService;
+    private final ApiResponseMapper apiResponseMapper;
 
-    public WorkflowController(WorkflowQueryService queryService, WorkflowCommandService commandService) {
+    public WorkflowController(WorkflowQueryService queryService, WorkflowCommandService commandService, ApiResponseMapper apiResponseMapper) {
         this.queryService = queryService;
         this.commandService = commandService;
+        this.apiResponseMapper = apiResponseMapper;
     }
 
     @GetMapping("/dashboard")
-    public WorkflowQueryService.DashboardSnapshot dashboard() { return queryService.getDashboard(); }
+    public ApiDtos.DashboardResponse dashboard() { return apiResponseMapper.toDashboardResponse(queryService.getDashboard()); }
 
     @PostMapping("/topics/proposals")
-    public WorkflowQueryService.DashboardSnapshot proposeTopic(@RequestBody TopicProposalRequest request) {
+    public ApiDtos.DashboardResponse proposeTopic(@RequestBody TopicProposalRequest request) {
         commandService.proposeTopic(request.studentId(), request.title(), request.description(), request.program());
-        return queryService.getDashboard();
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/topics/catalog")
-    public WorkflowQueryService.DashboardSnapshot createTeacherTopic(@RequestBody TeacherTopicRequest request) {
+    public ApiDtos.DashboardResponse createTeacherTopic(@RequestBody TeacherTopicRequest request) {
         commandService.createTeacherTopic(request.teacherId(), request.title(), request.description(), request.program());
-        return queryService.getDashboard();
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/topics/claim")
-    public WorkflowQueryService.DashboardSnapshot claimTopic(@RequestBody TopicClaimRequest request) {
+    public ApiDtos.DashboardResponse claimTopic(@RequestBody TopicClaimRequest request) {
         commandService.claimTopic(request.topicId(), request.studentId());
-        return queryService.getDashboard();
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/topics/teacher-decision")
-    public WorkflowQueryService.DashboardSnapshot teacherTopicDecision(@RequestBody DecisionRequest request) {
+    public ApiDtos.DashboardResponse teacherTopicDecision(@RequestBody DecisionRequest request) {
         commandService.teacherDecisionOnTopic(request.entityId(), request.actorId(), request.approved(), request.note());
-        return queryService.getDashboard();
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/topics/department-decision")
-    public WorkflowQueryService.DashboardSnapshot departmentTopicDecision(@RequestBody DepartmentTopicDecisionRequest request) {
+    public ApiDtos.DashboardResponse departmentTopicDecision(@RequestBody DepartmentTopicDecisionRequest request) {
         commandService.departmentDecisionOnTopic(request.topicId(), request.departmentId(), request.approved(), request.advisorTeacherId(), request.note());
-        return queryService.getDashboard();
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/plans")
-    public WorkflowQueryService.DashboardSnapshot savePlan(@RequestBody PlanSaveRequest request) {
+    public ApiDtos.DashboardResponse savePlan(@RequestBody PlanSaveRequest request) {
         List<WeeklyTask> tasks = request.tasks().stream().map(task -> new WeeklyTask(task.week(), task.title(), task.deliverable(), task.focus())).toList();
         commandService.savePlan(request.studentId(), request.topicId(), tasks);
-        return queryService.getDashboard();
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/plans/submit")
-    public WorkflowQueryService.DashboardSnapshot submitPlan(@RequestBody PlanSubmitRequest request) {
+    public ApiDtos.DashboardResponse submitPlan(@RequestBody PlanSubmitRequest request) {
         commandService.submitPlan(request.planId(), request.studentId());
-        return queryService.getDashboard();
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/plans/teacher-decision")
-    public WorkflowQueryService.DashboardSnapshot teacherPlanDecision(@RequestBody DecisionRequest request) {
+    public ApiDtos.DashboardResponse teacherPlanDecision(@RequestBody DecisionRequest request) {
         commandService.teacherDecisionOnPlan(request.entityId(), request.actorId(), request.approved(), request.note());
-        return queryService.getDashboard();
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/plans/department-decision")
-    public WorkflowQueryService.DashboardSnapshot departmentPlanDecision(@RequestBody DecisionRequest request) {
+    public ApiDtos.DashboardResponse departmentPlanDecision(@RequestBody DecisionRequest request) {
         commandService.departmentDecisionOnPlan(request.entityId(), request.actorId(), request.approved(), request.note());
-        return queryService.getDashboard();
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/reviews")
-    public WorkflowQueryService.DashboardSnapshot review(@RequestBody ReviewRequest request) {
+    public ApiDtos.DashboardResponse review(@RequestBody ReviewRequest request) {
         commandService.submitReview(request.planId(), request.reviewerId(), request.week(), request.score(), request.comment());
-        return queryService.getDashboard();
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})

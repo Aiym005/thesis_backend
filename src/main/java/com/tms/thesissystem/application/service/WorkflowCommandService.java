@@ -19,6 +19,10 @@ import java.util.List;
 
 @Service
 public class WorkflowCommandService {
+    private static final long STUDENT_OFFSET = 100_000L;
+    private static final long TEACHER_OFFSET = 200_000L;
+    private static final long DEPARTMENT_OFFSET = 300_000L;
+
     private final WorkflowRepository repository;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -186,7 +190,8 @@ public class WorkflowCommandService {
 
     private void publish(WorkflowEvent event) { eventPublisher.publishEvent(event); }
     private User getUser(Long userId, UserRole role) {
-        User user = repository.findUserById(userId).orElseThrow(() -> new IllegalArgumentException("Хэрэглэгч олдсонгүй."));
+        Long resolvedUserId = normalizeUserId(userId, role);
+        User user = repository.findUserById(resolvedUserId).orElseThrow(() -> new IllegalArgumentException("Хэрэглэгч олдсонгүй."));
         if (user.role() != role) throw new IllegalArgumentException("Хэрэглэгчийн role тохирохгүй байна.");
         return user;
     }
@@ -194,4 +199,16 @@ public class WorkflowCommandService {
     private Plan getPlan(Long planId) { return repository.findPlanById(planId).orElseThrow(() -> new IllegalArgumentException("Төлөвлөгөө олдсонгүй.")); }
     private List<Long> userIdsByRole(UserRole role) { return repository.findUsersByRole(role).stream().map(User::id).toList(); }
     private String safeNote(String note) { return note == null || note.isBlank() ? "Тайлбар өгөөгүй" : note; }
+
+    private Long normalizeUserId(Long userId, UserRole role) {
+        if (userId == null) {
+            throw new IllegalArgumentException("Хэрэглэгчийн id дамжуулаагүй байна.");
+        }
+        long offset = switch (role) {
+            case STUDENT -> STUDENT_OFFSET;
+            case TEACHER -> TEACHER_OFFSET;
+            case DEPARTMENT -> DEPARTMENT_OFFSET;
+        };
+        return userId >= offset ? userId : offset + userId;
+    }
 }

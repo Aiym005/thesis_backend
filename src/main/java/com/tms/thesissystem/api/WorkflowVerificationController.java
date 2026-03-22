@@ -2,11 +2,8 @@ package com.tms.thesissystem.api;
 
 import com.tms.thesissystem.application.service.WorkflowCommandService;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
-import com.tms.thesissystem.domain.model.Plan;
-import com.tms.thesissystem.domain.model.PlanStatus;
 import com.tms.thesissystem.domain.model.Topic;
 import com.tms.thesissystem.domain.model.TopicStatus;
-import com.tms.thesissystem.domain.model.User;
 import com.tms.thesissystem.domain.model.WeeklyTask;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -25,123 +22,101 @@ import java.util.Optional;
 public class WorkflowVerificationController {
     private final WorkflowQueryService queryService;
     private final WorkflowCommandService commandService;
+    private final ApiResponseMapper apiResponseMapper;
 
-    public WorkflowVerificationController(WorkflowQueryService queryService, WorkflowCommandService commandService) {
+    public WorkflowVerificationController(WorkflowQueryService queryService, WorkflowCommandService commandService, ApiResponseMapper apiResponseMapper) {
         this.queryService = queryService;
         this.commandService = commandService;
+        this.apiResponseMapper = apiResponseMapper;
     }
 
     @GetMapping("/state")
-    public WorkflowStateResponse state() {
-        return WorkflowStateResponse.from(queryService.getDashboard());
+    public ApiDtos.DashboardResponse state() {
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @GetMapping("/users")
-    public List<User> users() {
-        return queryService.getDashboard().users();
+    public List<ApiDtos.UserDto> users() {
+        return queryService.getDashboard().users().stream().map(apiResponseMapper::toUserDto).toList();
     }
 
     @GetMapping("/topics")
-    public TopicStateResponse topics() {
-        WorkflowQueryService.DashboardSnapshot snapshot = queryService.getDashboard();
-        return new TopicStateResponse(
-                snapshot.topics(),
-                filterTopics(snapshot.topics(), TopicStatus.AVAILABLE),
-                filterTopics(snapshot.topics(), TopicStatus.PENDING_TEACHER_APPROVAL),
-                filterTopics(snapshot.topics(), TopicStatus.PENDING_DEPARTMENT_APPROVAL),
-                filterTopics(snapshot.topics(), TopicStatus.APPROVED),
-                filterTopics(snapshot.topics(), TopicStatus.REJECTED)
-        );
+    public ApiDtos.TopicStateResponse topics() {
+        return apiResponseMapper.toWorkflowStateResponse(queryService.getDashboard()).topics();
     }
 
     @GetMapping("/plans")
-    public PlanStateResponse plans() {
-        WorkflowQueryService.DashboardSnapshot snapshot = queryService.getDashboard();
-        return new PlanStateResponse(
-                snapshot.plans(),
-                filterPlans(snapshot.plans(), PlanStatus.DRAFT),
-                filterPlans(snapshot.plans(), PlanStatus.PENDING_TEACHER_APPROVAL),
-                filterPlans(snapshot.plans(), PlanStatus.PENDING_DEPARTMENT_APPROVAL),
-                filterPlans(snapshot.plans(), PlanStatus.APPROVED),
-                filterPlans(snapshot.plans(), PlanStatus.REJECTED)
-        );
+    public ApiDtos.PlanStateResponse plans() {
+        return apiResponseMapper.toWorkflowStateResponse(queryService.getDashboard()).plans();
     }
 
     @PostMapping("/topics/student-proposals")
-    public TopicActionResponse studentProposesTopic(@RequestBody StudentTopicProposalRequest request) {
-        Topic topic = commandService.proposeTopic(request.studentId(), request.title(), request.description(), request.program());
-        return new TopicActionResponse(topic, WorkflowStateResponse.from(queryService.getDashboard()));
+    public ApiDtos.DashboardResponse studentProposesTopic(@RequestBody StudentTopicProposalRequest request) {
+        commandService.proposeTopic(request.studentId(), request.title(), request.description(), request.program());
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/topics/teacher-proposals")
-    public TopicActionResponse teacherProposesTopic(@RequestBody TeacherTopicProposalRequest request) {
-        Topic topic = commandService.createTeacherTopic(request.teacherId(), request.title(), request.description(), request.program());
-        return new TopicActionResponse(topic, WorkflowStateResponse.from(queryService.getDashboard()));
+    public ApiDtos.DashboardResponse teacherProposesTopic(@RequestBody TeacherTopicProposalRequest request) {
+        commandService.createTeacherTopic(request.teacherId(), request.title(), request.description(), request.program());
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/topics/selections")
-    public TopicActionResponse studentSelectsApprovedTopic(@RequestBody TopicSelectionRequest request) {
-        Topic topic = commandService.claimTopic(request.topicId(), request.studentId());
-        return new TopicActionResponse(topic, WorkflowStateResponse.from(queryService.getDashboard()));
+    public ApiDtos.DashboardResponse studentSelectsApprovedTopic(@RequestBody TopicSelectionRequest request) {
+        commandService.claimTopic(request.topicId(), request.studentId());
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/topics/teacher-approvals")
-    public TopicActionResponse teacherApprovesStudentTopic(@RequestBody TopicTeacherApprovalRequest request) {
+    public ApiDtos.DashboardResponse teacherApprovesStudentTopic(@RequestBody TopicTeacherApprovalRequest request) {
         Long resolvedTopicId = resolvePendingTeacherTopicId(request);
-        Topic topic = commandService.teacherDecisionOnTopic(resolvedTopicId, request.resolvedTeacherId(), request.approved(), request.note());
-        return new TopicActionResponse(topic, WorkflowStateResponse.from(queryService.getDashboard()));
+        commandService.teacherDecisionOnTopic(resolvedTopicId, request.resolvedTeacherId(), request.approved(), request.note());
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/topics/department-approvals")
-    public TopicActionResponse departmentApprovesTopic(@RequestBody TopicDepartmentApprovalRequest request) {
-        Topic topic = commandService.departmentDecisionOnTopic(
+    public ApiDtos.DashboardResponse departmentApprovesTopic(@RequestBody TopicDepartmentApprovalRequest request) {
+        commandService.departmentDecisionOnTopic(
                 request.topicId(),
                 request.departmentId(),
                 request.approved(),
                 request.advisorTeacherId(),
                 request.note()
         );
-        return new TopicActionResponse(topic, WorkflowStateResponse.from(queryService.getDashboard()));
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/plans")
-    public PlanActionResponse studentCreatesPlan(@RequestBody StudentPlanRequest request) {
+    public ApiDtos.DashboardResponse studentCreatesPlan(@RequestBody StudentPlanRequest request) {
         List<WeeklyTask> tasks = request.tasks().stream()
                 .map(task -> new WeeklyTask(task.week(), task.title(), task.deliverable(), task.focus()))
                 .toList();
-        Plan plan = commandService.savePlan(request.studentId(), request.topicId(), tasks);
-        return new PlanActionResponse(plan, WorkflowStateResponse.from(queryService.getDashboard()));
+        commandService.savePlan(request.studentId(), request.topicId(), tasks);
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/plans/submit")
-    public PlanActionResponse studentSubmitsPlan(@RequestBody PlanSubmitRequest request) {
-        Plan plan = commandService.submitPlan(request.planId(), request.studentId());
-        return new PlanActionResponse(plan, WorkflowStateResponse.from(queryService.getDashboard()));
+    public ApiDtos.DashboardResponse studentSubmitsPlan(@RequestBody PlanSubmitRequest request) {
+        commandService.submitPlan(request.planId(), request.studentId());
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/plans/teacher-approvals")
-    public PlanActionResponse teacherApprovesPlan(@RequestBody PlanApprovalRequest request) {
-        Plan plan = commandService.teacherDecisionOnPlan(request.planId(), request.actorId(), request.approved(), request.note());
-        return new PlanActionResponse(plan, WorkflowStateResponse.from(queryService.getDashboard()));
+    public ApiDtos.DashboardResponse teacherApprovesPlan(@RequestBody PlanApprovalRequest request) {
+        commandService.teacherDecisionOnPlan(request.planId(), request.actorId(), request.approved(), request.note());
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/plans/department-approvals")
-    public PlanActionResponse departmentApprovesPlan(@RequestBody PlanApprovalRequest request) {
-        Plan plan = commandService.departmentDecisionOnPlan(request.planId(), request.actorId(), request.approved(), request.note());
-        return new PlanActionResponse(plan, WorkflowStateResponse.from(queryService.getDashboard()));
+    public ApiDtos.DashboardResponse departmentApprovesPlan(@RequestBody PlanApprovalRequest request) {
+        commandService.departmentDecisionOnPlan(request.planId(), request.actorId(), request.approved(), request.note());
+        return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     public void handleDomainError(RuntimeException exception) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
-    }
-
-    private List<Topic> filterTopics(List<Topic> topics, TopicStatus status) {
-        return topics.stream().filter(topic -> topic.status() == status).toList();
-    }
-
-    private List<Plan> filterPlans(List<Plan> plans, PlanStatus status) {
-        return plans.stream().filter(plan -> plan.status() == status).toList();
     }
 
     private Long resolvePendingTeacherTopicId(TopicTeacherApprovalRequest request) {
@@ -177,54 +152,4 @@ public class WorkflowVerificationController {
     public record PlanSubmitRequest(Long planId, Long studentId) { }
     public record PlanApprovalRequest(Long planId, Long actorId, boolean approved, String note) { }
 
-    public record TopicActionResponse(Topic topic, WorkflowStateResponse state) { }
-    public record PlanActionResponse(Plan plan, WorkflowStateResponse state) { }
-
-    public record TopicStateResponse(
-            List<Topic> allTopics,
-            List<Topic> availableTopics,
-            List<Topic> pendingTeacherApprovalTopics,
-            List<Topic> pendingDepartmentApprovalTopics,
-            List<Topic> approvedStudentTopics,
-            List<Topic> rejectedTopics
-    ) { }
-
-    public record PlanStateResponse(
-            List<Plan> allPlans,
-            List<Plan> draftPlans,
-            List<Plan> pendingTeacherApprovalPlans,
-            List<Plan> pendingDepartmentApprovalPlans,
-            List<Plan> approvedPlans,
-            List<Plan> rejectedPlans
-    ) { }
-
-    public record WorkflowStateResponse(
-            List<User> users,
-            TopicStateResponse topics,
-            PlanStateResponse plans
-    ) {
-        public static WorkflowStateResponse from(WorkflowQueryService.DashboardSnapshot snapshot) {
-            List<Topic> topics = snapshot.topics();
-            List<Plan> plans = snapshot.plans();
-            return new WorkflowStateResponse(
-                    snapshot.users(),
-                    new TopicStateResponse(
-                            topics,
-                            topics.stream().filter(topic -> topic.status() == TopicStatus.AVAILABLE).toList(),
-                            topics.stream().filter(topic -> topic.status() == TopicStatus.PENDING_TEACHER_APPROVAL).toList(),
-                            topics.stream().filter(topic -> topic.status() == TopicStatus.PENDING_DEPARTMENT_APPROVAL).toList(),
-                            topics.stream().filter(topic -> topic.status() == TopicStatus.APPROVED).toList(),
-                            topics.stream().filter(topic -> topic.status() == TopicStatus.REJECTED).toList()
-                    ),
-                    new PlanStateResponse(
-                            plans,
-                            plans.stream().filter(plan -> plan.status() == PlanStatus.DRAFT).toList(),
-                            plans.stream().filter(plan -> plan.status() == PlanStatus.PENDING_TEACHER_APPROVAL).toList(),
-                            plans.stream().filter(plan -> plan.status() == PlanStatus.PENDING_DEPARTMENT_APPROVAL).toList(),
-                            plans.stream().filter(plan -> plan.status() == PlanStatus.APPROVED).toList(),
-                            plans.stream().filter(plan -> plan.status() == PlanStatus.REJECTED).toList()
-                    )
-            );
-        }
-    }
 }
