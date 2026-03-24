@@ -1,16 +1,18 @@
 package com.tms.thesissystem.application.service;
 
 import com.tms.thesissystem.application.event.WorkflowEvent;
+import com.tms.thesissystem.application.port.WorkflowEventPublisher;
 import com.tms.thesissystem.application.port.WorkflowRepository;
 import com.tms.thesissystem.domain.model.Plan;
 import com.tms.thesissystem.domain.model.PlanStatus;
+import com.tms.thesissystem.domain.model.ApprovalRecord;
+import com.tms.thesissystem.domain.model.ApprovalStage;
 import com.tms.thesissystem.domain.model.Review;
 import com.tms.thesissystem.domain.model.Topic;
 import com.tms.thesissystem.domain.model.TopicStatus;
 import com.tms.thesissystem.domain.model.User;
 import com.tms.thesissystem.domain.model.UserRole;
 import com.tms.thesissystem.domain.model.WeeklyTask;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -24,9 +26,9 @@ public class WorkflowCommandService {
     private static final long DEPARTMENT_OFFSET = 300_000L;
 
     private final WorkflowRepository repository;
-    private final ApplicationEventPublisher eventPublisher;
+    private final WorkflowEventPublisher eventPublisher;
 
-    public WorkflowCommandService(WorkflowRepository repository, ApplicationEventPublisher eventPublisher) {
+    public WorkflowCommandService(WorkflowRepository repository, WorkflowEventPublisher eventPublisher) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
     }
@@ -63,6 +65,7 @@ public class WorkflowCommandService {
     public Topic teacherDecisionOnTopic(Long topicId, Long teacherId, boolean approved, String note) {
         User teacher = getUser(teacherId, UserRole.TEACHER);
         Topic topic = getTopic(topicId);
+        Long previousOwnerStudentId = topic.ownerStudentId();
         topic.teacherDecision(teacher, approved, note, LocalDateTime.now());
         topic = repository.saveTopic(topic);
         publish(topicEvent(topic, approved ? "TOPIC_APPROVED_BY_TEACHER" : "TOPIC_REJECTED_BY_TEACHER", teacher.fullName(),
@@ -70,25 +73,39 @@ public class WorkflowCommandService {
                 approved ? "Сэдэв тэнхимийн баталгаажуулалт руу шилжлээ" : "Сэдэв буцаагдлаа",
                 approved ? "\"" + topic.title() + "\" сэдвийг тэнхимийн баталгаажуулалт руу шилжүүллээ."
                         : "\"" + topic.title() + "\" сэдвийг буцаалаа. Тайлбар: " + safeNote(note),
-                approved ? userIdsByRole(UserRole.DEPARTMENT) : List.of(topic.ownerStudentId())));
+                approved ? userIdsByRole(UserRole.DEPARTMENT)
+                        : previousOwnerStudentId == null ? List.of() : List.of(previousOwnerStudentId)));
         return topic;
     }
 
     public Topic departmentDecisionOnTopic(Long topicId, Long departmentId, boolean approved, Long advisorTeacherId, String note) {
         User department = getUser(departmentId, UserRole.DEPARTMENT);
         Topic topic = getTopic(topicId);
+        Long previousOwnerStudentId = topic.ownerStudentId();
         boolean requiresAdvisorAssignment = approved && topic.ownerStudentId() != null;
         User advisor = null;
         if (approved && advisorTeacherId != null) {
             advisor = getUser(advisorTeacherId, UserRole.TEACHER);
         }
         if (requiresAdvisorAssignment && advisor == null) {
+            advisor = topic.approvals().stream()
+                    .filter(record -> record.stage() == ApprovalStage.TEACHER)
+                    .filter(ApprovalRecord::approved)
+                    .reduce((first, second) -> second)
+                    .map(record -> getUser(record.actorId(), UserRole.TEACHER))
+                    .orElse(null);
+        }
+        if (requiresAdvisorAssignment && advisor == null) {
             throw new IllegalArgumentException("Оюутны сэдэв дээр удирдагч багшийг заавал томилно.");
         }
         topic.departmentDecision(department, approved, advisor == null ? null : advisor.id(), advisor == null ? null : advisor.fullName(), note, LocalDateTime.now());
         topic = repository.saveTopic(topic);
+        if (approved && topic.ownerStudentId() != null) {
+            supersedePreviousTopics(topic);
+        }
         List<Long> recipients = new ArrayList<>();
         if (topic.ownerStudentId() != null) recipients.add(topic.ownerStudentId());
+        else if (previousOwnerStudentId != null) recipients.add(previousOwnerStudentId);
         if (approved && advisor != null) recipients.add(advisor.id());
         if (approved && topic.ownerStudentId() == null) {
             recipients.addAll(userIdsByRole(UserRole.STUDENT));
@@ -110,11 +127,9 @@ public class WorkflowCommandService {
 
     public Plan savePlan(Long studentId, Long topicId, List<WeeklyTask> tasks) {
         User student = getUser(studentId, UserRole.STUDENT);
-        Topic topic = getTopic(topicId);
-        if (topic.status() != TopicStatus.APPROVED || !studentId.equals(topic.ownerStudentId())) {
-            throw new IllegalStateException("Энэ оюутан батлагдсан өөрийн сэдэв дээр л төлөвлөгөө үүсгэнэ.");
-        }
+        Topic topic = resolveApprovedTopicForPlan(student.id(), topicId);
         Plan plan = repository.findPlanByStudentId(studentId)
+                .filter(existing -> existing.topicId().equals(topic.id()))
                 .orElseGet(() -> new Plan(repository.nextPlanId(), topic.id(), topic.title(), student.id(), student.fullName(),
                         PlanStatus.DRAFT, tasks, List.of(), LocalDateTime.now(), LocalDateTime.now()));
         plan.updateTasks(tasks, LocalDateTime.now());
@@ -133,7 +148,10 @@ public class WorkflowCommandService {
         plan = repository.savePlan(plan);
         Topic topic = getTopic(plan.topicId());
         List<Long> recipients = new ArrayList<>();
-        if (topic.advisorTeacherId() != null) recipients.add(topic.advisorTeacherId()); else recipients.addAll(userIdsByRole(UserRole.TEACHER));
+        if (topic.advisorTeacherId() == null) {
+            throw new IllegalStateException("Төлөвлөгөө илгээхийн өмнө сэдэв дээр удирдагч багш томилогдсон байх ёстой.");
+        }
+        recipients.add(topic.advisorTeacherId());
         publish(new WorkflowEvent("PLAN", plan.id(), "PLAN_SUBMITTED", student.fullName(), "Оюутан төлөвлөгөөг багшид илгээлээ.",
                 "Шинэ төлөвлөгөө баталгаажуулалт хүлээж байна", student.fullName() + " \"" + plan.topicTitle() + "\" сэдвийн 15 долоо хоногийн төлөвлөгөөг илгээлээ.",
                 recipients, LocalDateTime.now()));
@@ -143,6 +161,10 @@ public class WorkflowCommandService {
     public Plan teacherDecisionOnPlan(Long planId, Long teacherId, boolean approved, String note) {
         User teacher = getUser(teacherId, UserRole.TEACHER);
         Plan plan = getPlan(planId);
+        Topic topic = getTopic(plan.topicId());
+        if (topic.advisorTeacherId() == null || !topic.advisorTeacherId().equals(teacher.id())) {
+            throw new IllegalStateException("Төлөвлөгөөг зөвхөн удирдагч багш батална.");
+        }
         plan.teacherDecision(teacher, approved, note, LocalDateTime.now());
         plan = repository.savePlan(plan);
         publish(new WorkflowEvent("PLAN", plan.id(), approved ? "PLAN_APPROVED_BY_TEACHER" : "PLAN_REJECTED_BY_TEACHER", teacher.fullName(),
@@ -188,7 +210,7 @@ public class WorkflowCommandService {
         return new WorkflowEvent("TOPIC", topic.id(), action, actorName, detail, notificationTitle, notificationMessage, recipientIds, LocalDateTime.now());
     }
 
-    private void publish(WorkflowEvent event) { eventPublisher.publishEvent(event); }
+    private void publish(WorkflowEvent event) { eventPublisher.publish(event); }
     private User getUser(Long userId, UserRole role) {
         Long resolvedUserId = normalizeUserId(userId, role);
         User user = repository.findUserById(resolvedUserId).orElseThrow(() -> new IllegalArgumentException("Хэрэглэгч олдсонгүй."));
@@ -199,6 +221,39 @@ public class WorkflowCommandService {
     private Plan getPlan(Long planId) { return repository.findPlanById(planId).orElseThrow(() -> new IllegalArgumentException("Төлөвлөгөө олдсонгүй.")); }
     private List<Long> userIdsByRole(UserRole role) { return repository.findUsersByRole(role).stream().map(User::id).toList(); }
     private String safeNote(String note) { return note == null || note.isBlank() ? "Тайлбар өгөөгүй" : note; }
+
+    private Topic resolveApprovedTopicForPlan(Long studentId, Long requestedTopicId) {
+        if (requestedTopicId != null) {
+            Topic requestedTopic = getTopic(requestedTopicId);
+            if (requestedTopic.status() == TopicStatus.APPROVED && studentId.equals(requestedTopic.ownerStudentId())) {
+                return requestedTopic;
+            }
+        }
+        return repository.findAllTopics().stream()
+                .filter(topic -> topic.status() == TopicStatus.APPROVED)
+                .filter(topic -> studentId.equals(topic.ownerStudentId()))
+                .sorted((left, right) -> right.updatedAt().compareTo(left.updatedAt()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Энэ оюутан батлагдсан өөрийн сэдэв дээр л төлөвлөгөө үүсгэнэ."));
+    }
+
+    private void supersedePreviousTopics(Topic approvedTopic) {
+        Long studentId = approvedTopic.ownerStudentId();
+        if (studentId == null) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        repository.findAllTopics().stream()
+                .filter(topic -> !topic.id().equals(approvedTopic.id()))
+                .filter(topic -> studentId.equals(topic.ownerStudentId()))
+                .filter(topic -> topic.status() == TopicStatus.APPROVED
+                        || topic.status() == TopicStatus.PENDING_TEACHER_APPROVAL
+                        || topic.status() == TopicStatus.PENDING_DEPARTMENT_APPROVAL)
+                .forEach(topic -> {
+                    topic.supersede(now);
+                    repository.saveTopic(topic);
+                });
+    }
 
     private Long normalizeUserId(Long userId, UserRole role) {
         if (userId == null) {

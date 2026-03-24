@@ -85,4 +85,8 @@ public final class ApiDtos {
     public record TopicActionResponse(TopicDto topic, WorkflowStateResponse state) { }
 
     public record PlanActionResponse(PlanDto plan, WorkflowStateResponse state) { }
+
+    public record AuthUserDto(Long id, String username, String displayName, String role) { }
+
+    public record LoginResponse(boolean ok, String message, AuthUserDto user) { }
 }

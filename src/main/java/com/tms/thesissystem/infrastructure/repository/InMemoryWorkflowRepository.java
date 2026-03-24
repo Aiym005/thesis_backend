@@ -62,6 +62,7 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
         this.username = username;
         this.password = password;
         seedIfEmpty();
+        reconcileApprovedTopicsPerStudent();
     }
 
     private void seedIfEmpty() {
@@ -69,49 +70,59 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
              Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery("select count(*) from student")) {
             resultSet.next();
-            if (resultSet.getInt(1) > 0) {
-                return;
-            }
             connection.setAutoCommit(false);
             try {
-                long departmentId = insertDepartment(connection, "Software Engineering");
-                long studentAId = insertStudent(connection, departmentId, "Anu", "Bat", "anu@tms.mn", "B.SE", "22B1NUM0027");
-                long studentBId = insertStudent(connection, departmentId, "Temuulen", "Dorj", "temuulen@tms.mn", "B.SE", "22B1NUM0028");
-                long teacherAId = insertTeacher(connection, departmentId, "Enkh", "Suren", "enkh@tms.mn");
-                long teacherBId = insertTeacher(connection, departmentId, "Bolor", "Naran", "bolor@tms.mn");
-                long teacherCId = insertTeacher(connection, departmentId, "Saruul", "Munkh", "saruul@tms.mn");
+                if (resultSet.getInt(1) == 0) {
+                    long softwareEngineeringDepartmentId = insertDepartment(connection, "Software Engineering");
+                    long informationSystemsDepartmentId = insertDepartment(connection, "Information Systems");
+                    long dataScienceDepartmentId = insertDepartment(connection, "Data Science");
 
-                long availableA = insertTopic(connection, teacherAId, UserRole.TEACHER, "B.SE", TopicStatus.AVAILABLE,
-                        payload("AI-based Thesis Workflow Automation",
-                                "Дипломын сэдэв дэвшүүлэлт, баталгаажуулалт, явцын хяналтыг автоматжуулах.",
-                                null, null, null, null, List.of()));
-                long availableB = insertTopic(connection, teacherBId, UserRole.TEACHER, "B.SE", TopicStatus.AVAILABLE,
-                        payload("Event-driven Student Research Tracker",
-                                "Судалгааны milestone, reminder, review процессыг event bus ашиглан удирдах.",
-                                null, null, null, null, List.of()));
+                    long studentAId = insertStudent(connection, softwareEngineeringDepartmentId, "Anu", "Bat", "anu@tms.mn", "B.SE", "22B1NUM0027");
+                    long studentBId = insertStudent(connection, softwareEngineeringDepartmentId, "Temuulen", "Dorj", "temuulen@tms.mn", "B.SE", "22B1NUM0028");
+                    long studentCId = insertStudent(connection, informationSystemsDepartmentId, "Nomin", "Erdene", "nomin@tms.mn", "B.IS", "22B1NUM0029");
 
-                long approvedTopicId = insertTopic(connection, studentBId, UserRole.STUDENT, "B.SE", TopicStatus.APPROVED,
-                        payload("Layered Architecture for Graduation Management",
-                                "Тэнхим, багш, оюутны approval flow-тай систем боловсруулах.",
-                                studentBId, "Temuulen Dorj", teacherAId, "Enkh Suren", List.of()));
-                insertTopicRequest(connection, approvedTopicId, studentBId, UserRole.STUDENT, true, "Seed request");
+                    long teacherAId = insertTeacher(connection, softwareEngineeringDepartmentId, "Enkh", "Suren", "enkh@tms.mn");
+                    long teacherBId = insertTeacher(connection, softwareEngineeringDepartmentId, "Bolor", "Naran", "bolor@tms.mn");
+                    long teacherCId = insertTeacher(connection, dataScienceDepartmentId, "Saruul", "Munkh", "saruul@tms.mn");
 
-                long planId = insertPlan(connection, approvedTopicId, studentBId, PlanStatus.APPROVED);
-                for (int week = 1; week <= 15; week++) {
-                    insertPlanWeek(connection, planId, week, "7 хоног " + week + " - milestone", json(Map.of(
-                            "deliverable", "Deliverable " + week,
-                            "focus", "Судалгаа, загварчлал, хэрэгжилт, тест"
-                    )));
+                    ensureCatalogTopic(connection, teacherAId, "B.SE", "AI-based Thesis Workflow Automation",
+                            "Дипломын сэдэв дэвшүүлэлт, баталгаажуулалт, явцын хяналтыг автоматжуулах.");
+                    ensureCatalogTopic(connection, teacherBId, "B.SE", "Event-driven Student Research Tracker",
+                            "Судалгааны milestone, reminder, review процессыг event bus ашиглан удирдах.");
+                    ensureCatalogTopic(connection, teacherCId, "B.DS", "Data-driven Research Planning",
+                            "Өгөгдөлд суурилсан судалгааны төлөвлөлт ба үнэлгээний систем.");
+
+                    long approvedTopicId = insertTopic(connection, studentBId, UserRole.STUDENT, "B.SE", TopicStatus.APPROVED,
+                            payload("Layered Architecture for Graduation Management",
+                                    "Тэнхим, багш, оюутны approval flow-тай систем боловсруулах.",
+                                    studentBId, "Temuulen Dorj", teacherAId, "Enkh Suren", List.of()));
+                    insertTopicRequest(connection, approvedTopicId, studentBId, UserRole.STUDENT, true, "Seed request");
+
+                    long pendingTeacherTopicId = insertTopic(connection, studentAId, UserRole.STUDENT, "B.SE", TopicStatus.PENDING_TEACHER_APPROVAL,
+                            payload("Distributed Thesis Workflow",
+                                    "Оюутны санал болгосон дипломын workflow automation сэдэв.",
+                                    studentAId, "Anu Bat", null, null, List.of()));
+                    insertTopicRequest(connection, pendingTeacherTopicId, studentAId, UserRole.STUDENT, true, "Seed pending teacher request");
+
+                    long planId = insertPlan(connection, approvedTopicId, studentBId, PlanStatus.APPROVED);
+                    for (int week = 1; week <= 15; week++) {
+                        insertPlanWeek(connection, planId, week, "7 хоног " + week + " - milestone", json(Map.of(
+                                "deliverable", "Deliverable " + week,
+                                "focus", "Судалгаа, загварчлал, хэрэгжилт, тест"
+                        )));
+                    }
+                    insertPlanResponse(connection, planId, teacherAId, "TEACHER", "APPROVED", "Seed teacher approval");
+                    insertPlanResponse(connection, planId, softwareEngineeringDepartmentId, "DEPARTMENT", "APPROVED", "Seed department approval");
+
+                    reviews.put(3001L, new Review(3001L, planId, 4, encodeUserId(UserRole.TEACHER, teacherAId), "Enkh Suren", 92,
+                            "Судалгааны хэсэг сайн, implementation-ийн architecture section-ийг гүнзгийрүүл.", LocalDateTime.now().minusDays(1)));
+                    notifications.put(4001L, new Notification(4001L, encodeUserId(UserRole.STUDENT, studentBId), "Төлөвлөгөө батлагдсан",
+                            "15 долоо хоногийн төлөвлөгөөг тэнхим баталгаажууллаа.", LocalDateTime.now().minusHours(6)));
+                    audits.put(5001L, new AuditEntry(5001L, "PLAN", planId, "PLAN_APPROVED", "SE Department",
+                            "Тэнхим төлөвлөгөөг эцэслэн баталж review phase-ийг нээлээ.", LocalDateTime.now().minusHours(6)));
                 }
-                insertPlanResponse(connection, planId, teacherAId, "TEACHER", "APPROVED", "Seed teacher approval");
-                insertPlanResponse(connection, planId, departmentId, "DEPARTMENT", "APPROVED", "Seed department approval");
-
-                reviews.put(3001L, new Review(3001L, planId, 4, encodeUserId(UserRole.TEACHER, teacherAId), "Enkh Suren", 92,
-                        "Судалгааны хэсэг сайн, implementation-ийн architecture section-ийг гүнзгийрүүл.", LocalDateTime.now().minusDays(1)));
-                notifications.put(4001L, new Notification(4001L, encodeUserId(UserRole.STUDENT, studentBId), "Төлөвлөгөө батлагдсан",
-                        "15 долоо хоногийн төлөвлөгөөг тэнхим баталгаажууллаа.", LocalDateTime.now().minusHours(6)));
-                audits.put(5001L, new AuditEntry(5001L, "PLAN", planId, "PLAN_APPROVED", "SE Department",
-                        "Тэнхим төлөвлөгөөг эцэслэн баталж review phase-ийг нээлээ.", LocalDateTime.now().minusHours(6)));
+                ensureUsersForExistingData(connection);
+                ensureCatalogTopicsForExistingData(connection);
 
                 connection.commit();
             } catch (Exception exception) {
@@ -122,6 +133,130 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
             }
         } catch (Exception exception) {
             throw new IllegalStateException("Database seed failed", exception);
+        }
+    }
+
+    private void ensureUsersForExistingData(Connection connection) throws Exception {
+        long softwareEngineeringDepartmentId = findOrCreateDepartment(connection, "Software Engineering");
+        long informationSystemsDepartmentId = findOrCreateDepartment(connection, "Information Systems");
+        long dataScienceDepartmentId = findOrCreateDepartment(connection, "Data Science");
+
+        ensureStudent(connection, softwareEngineeringDepartmentId, "Anu", "Bat", "anu@tms.mn", "B.SE", "22B1NUM0027");
+        ensureStudent(connection, softwareEngineeringDepartmentId, "Temuulen", "Dorj", "temuulen@tms.mn", "B.SE", "22B1NUM0028");
+        ensureStudent(connection, informationSystemsDepartmentId, "Nomin", "Erdene", "nomin@tms.mn", "B.IS", "22B1NUM0029");
+
+        ensureTeacher(connection, softwareEngineeringDepartmentId, "Enkh", "Suren", "enkh@tms.mn");
+        ensureTeacher(connection, softwareEngineeringDepartmentId, "Bolor", "Naran", "bolor@tms.mn");
+        ensureTeacher(connection, dataScienceDepartmentId, "Saruul", "Munkh", "saruul@tms.mn");
+    }
+
+    private long findOrCreateDepartment(Connection connection, String name) throws Exception {
+        try (PreparedStatement ps = connection.prepareStatement("select id from department where name = ?")) {
+            ps.setString(1, name);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
+                }
+            }
+        }
+        return insertDepartment(connection, name);
+    }
+
+    private void ensureStudent(Connection connection, long depId, String firstName, String lastName, String mail, String program, String sisiId) throws Exception {
+        try (PreparedStatement ps = connection.prepareStatement("select id from student where mail = ?")) {
+            ps.setString(1, mail);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return;
+                }
+            }
+        }
+        insertStudent(connection, depId, firstName, lastName, mail, program, sisiId);
+    }
+
+    private void ensureTeacher(Connection connection, long depId, String firstName, String lastName, String mail) throws Exception {
+        try (PreparedStatement ps = connection.prepareStatement("select id from teacher where mail = ?")) {
+            ps.setString(1, mail);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return;
+                }
+            }
+        }
+        insertTeacher(connection, depId, firstName, lastName, mail);
+    }
+
+    private void ensureCatalogTopicsForExistingData(Connection connection) throws Exception {
+        Long teacherAId = findTeacherIdByEmail(connection, "enkh@tms.mn");
+        Long teacherBId = findTeacherIdByEmail(connection, "bolor@tms.mn");
+        Long teacherCId = findTeacherIdByEmail(connection, "saruul@tms.mn");
+
+        if (countAvailableTopics(connection) == 0) {
+            if (teacherAId != null) {
+                insertTopic(connection, teacherAId, UserRole.TEACHER, "B.SE", TopicStatus.AVAILABLE,
+                        payload("Open Catalog Topic A", "Оюутнууд сонгож болох нээлттэй сэдэв A.", null, null, null, null, List.of()));
+            }
+            if (teacherBId != null) {
+                insertTopic(connection, teacherBId, UserRole.TEACHER, "B.SE", TopicStatus.AVAILABLE,
+                        payload("Open Catalog Topic B", "Оюутнууд сонгож болох нээлттэй сэдэв B.", null, null, null, null, List.of()));
+            }
+            if (teacherCId != null) {
+                insertTopic(connection, teacherCId, UserRole.TEACHER, "B.DS", TopicStatus.AVAILABLE,
+                        payload("Open Catalog Topic C", "Оюутнууд сонгож болох нээлттэй сэдэв C.", null, null, null, null, List.of()));
+            }
+        }
+
+        if (teacherAId != null) {
+            ensureCatalogTopic(connection, teacherAId, "B.SE", "AI-based Thesis Workflow Automation",
+                    "Дипломын сэдэв дэвшүүлэлт, баталгаажуулалт, явцын хяналтыг автоматжуулах.");
+        }
+        if (teacherBId != null) {
+            ensureCatalogTopic(connection, teacherBId, "B.SE", "Event-driven Student Research Tracker",
+                    "Судалгааны milestone, reminder, review процессыг event bus ашиглан удирдах.");
+        }
+        if (teacherCId != null) {
+            ensureCatalogTopic(connection, teacherCId, "B.DS", "Data-driven Research Planning",
+                    "Өгөгдөлд суурилсан судалгааны төлөвлөлт ба үнэлгээний систем.");
+        }
+    }
+
+    private int countAvailableTopics(Connection connection) throws Exception {
+        try (PreparedStatement ps = connection.prepareStatement("select count(*) from topic where status = ?")) {
+            ps.setString(1, TopicStatus.AVAILABLE.name());
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    private void ensureCatalogTopic(Connection connection, Long teacherId, String program, String title, String description) throws Exception {
+        if (topicExists(connection, title)) {
+            return;
+        }
+        insertTopic(connection, teacherId, UserRole.TEACHER, program, TopicStatus.AVAILABLE,
+                payload(title, description, null, null, null, null, List.of()));
+    }
+
+    private boolean topicExists(Connection connection, String title) throws Exception {
+        try (PreparedStatement ps = connection.prepareStatement("select count(*) from topic where fields::text ilike ?")) {
+            ps.setString(1, "%\"title\":\"" + title + "\"%");
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1) > 0;
+            }
+        }
+    }
+
+    private Long findTeacherIdByEmail(Connection connection, String email) throws Exception {
+        try (PreparedStatement ps = connection.prepareStatement("select id from teacher where mail = ?")) {
+            ps.setString(1, email);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
+                }
+                return null;
+            }
         }
     }
 
@@ -142,7 +277,7 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
                 }
             }
             try (Statement statement = connection.createStatement();
-                 ResultSet rs = statement.executeQuery("select id, name from department order by id")) {
+                 ResultSet rs = statement.executeQuery("select id, name from department order by id limit 1")) {
                 while (rs.next()) {
                     users.add(new User(encodeUserId(UserRole.DEPARTMENT, rs.getLong(1)), UserRole.DEPARTMENT, rs.getString(2), "Department", rs.getString(2).toLowerCase().replace(" ", "") + "@tms.mn", rs.getString(2), null));
                 }
@@ -392,7 +527,9 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
         Long ownerStudentId = longValue(fields.get("ownerStudentId"));
         String ownerStudentName = stringValue(fields.get("ownerStudentName"));
         List<ApprovalRecord> approvals = mapApprovals(fields.get("approvals"));
-        if (ownerStudentId == null) {
+        TopicStatus status = TopicStatus.valueOf(rs.getString("status"));
+        if (ownerStudentId == null
+                && (status == TopicStatus.PENDING_TEACHER_APPROVAL || status == TopicStatus.PENDING_DEPARTMENT_APPROVAL)) {
             try (PreparedStatement ps = connection.prepareStatement("select requested_by_id from topic_request where topic_id = ? order by id desc limit 1")) {
                 ps.setLong(1, topicId);
                 try (ResultSet requestRs = ps.executeQuery()) {
@@ -415,11 +552,34 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
                 ownerStudentName,
                 longValue(fields.get("advisorTeacherId")) == null ? null : encodeUserId(UserRole.TEACHER, longValue(fields.get("advisorTeacherId"))),
                 stringValue(fields.get("advisorTeacherName")),
-                TopicStatus.valueOf(rs.getString("status")),
+                status,
                 localDateTime(rs.getDate("created_at")),
                 localDateTime(rs.getDate("created_at")),
                 approvals
         );
+    }
+
+    private void reconcileApprovedTopicsPerStudent() {
+        Map<Long, List<Topic>> approvedTopicsByStudent = new LinkedHashMap<>();
+        for (Topic topic : findAllTopics()) {
+            if (topic.status() != TopicStatus.APPROVED || topic.ownerStudentId() == null) {
+                continue;
+            }
+            approvedTopicsByStudent
+                    .computeIfAbsent(topic.ownerStudentId(), ignored -> new ArrayList<>())
+                    .add(topic);
+        }
+
+        approvedTopicsByStudent.values().forEach(topics -> {
+            if (topics.size() < 2) {
+                return;
+            }
+            topics.sort(Comparator.comparing(Topic::id).reversed());
+            topics.stream().skip(1).forEach(topic -> {
+                topic.supersede(LocalDateTime.now());
+                saveTopic(topic);
+            });
+        });
     }
 
     private Plan mapPlan(Connection connection, ResultSet rs) throws Exception {

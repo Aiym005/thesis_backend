@@ -57,11 +57,14 @@ public class TestWorkflowRepositoryConfig {
 
             User studentA = new User(100001L, UserRole.STUDENT, "Anu", "Bat", "anu@tms.mn", "Software Engineering", "B.SE");
             User studentB = new User(100002L, UserRole.STUDENT, "Temuulen", "Dorj", "temuulen@tms.mn", "Software Engineering", "B.SE");
+            User studentC = new User(100003L, UserRole.STUDENT, "Nomin", "Erdene", "nomin@tms.mn", "Information Systems", "B.IS");
             User teacherA = new User(200001L, UserRole.TEACHER, "Enkh", "Suren", "enkh@tms.mn", "Software Engineering", null);
             User teacherB = new User(200002L, UserRole.TEACHER, "Bolor", "Naran", "bolor@tms.mn", "Software Engineering", null);
-            User department = new User(300001L, UserRole.DEPARTMENT, "Software Engineering", "Department", "se@tms.mn", "Software Engineering", null);
+            User teacherC = new User(200003L, UserRole.TEACHER, "Saruul", "Munkh", "saruul@tms.mn", "Data Science", null);
+            User departmentA = new User(300001L, UserRole.DEPARTMENT, "Software Engineering", "Department", "se@tms.mn", "Software Engineering", null);
 
-            List.of(studentA, studentB, teacherA, teacherB, department).forEach(user -> users.put(user.id(), user));
+            List.of(studentA, studentB, studentC, teacherA, teacherB, teacherC, departmentA)
+                    .forEach(user -> users.put(user.id(), user));
 
             Topic pendingTeacherTopic = Topic.studentProposal(
                     1L,
@@ -87,7 +90,43 @@ public class TestWorkflowRepositoryConfig {
                     TopicStatus.AVAILABLE,
                     now.minusDays(5),
                     now.minusDays(5),
-                    List.of(new ApprovalRecord(ApprovalStage.DEPARTMENT, department.id(), department.fullName(), true, "Catalog approved", now.minusDays(4)))
+                    List.of(new ApprovalRecord(ApprovalStage.DEPARTMENT, departmentA.id(), departmentA.fullName(), true, "Catalog approved", now.minusDays(4)))
+            );
+
+            Topic availableTeacherTopicB = new Topic(
+                    4L,
+                    "AI-based Thesis Workflow Automation",
+                    "Оюутан сонгож болох багшийн батлагдсан сэдэв.",
+                    "B.SE",
+                    teacherB.id(),
+                    teacherB.fullName(),
+                    UserRole.TEACHER,
+                    null,
+                    null,
+                    teacherB.id(),
+                    teacherB.fullName(),
+                    TopicStatus.AVAILABLE,
+                    now.minusDays(6),
+                    now.minusDays(6),
+                    List.of(new ApprovalRecord(ApprovalStage.DEPARTMENT, departmentA.id(), departmentA.fullName(), true, "Catalog approved", now.minusDays(5)))
+            );
+
+            Topic availableTeacherTopicC = new Topic(
+                    5L,
+                    "Data-driven Research Planning",
+                    "Өгөгдөлд суурилсан судалгааны төлөвлөлтийн сэдэв.",
+                    "B.DS",
+                    teacherC.id(),
+                    teacherC.fullName(),
+                    UserRole.TEACHER,
+                    null,
+                    null,
+                    teacherC.id(),
+                    teacherC.fullName(),
+                    TopicStatus.AVAILABLE,
+                    now.minusDays(7),
+                    now.minusDays(7),
+                    List.of(new ApprovalRecord(ApprovalStage.DEPARTMENT, departmentA.id(), departmentA.fullName(), true, "Catalog approved", now.minusDays(6)))
             );
 
             Topic approvedStudentTopic = new Topic(
@@ -107,13 +146,15 @@ public class TestWorkflowRepositoryConfig {
                     now.minusDays(10),
                     List.of(
                             new ApprovalRecord(ApprovalStage.TEACHER, teacherA.id(), teacherA.fullName(), true, "Teacher approved", now.minusDays(11)),
-                            new ApprovalRecord(ApprovalStage.DEPARTMENT, department.id(), department.fullName(), true, "Department approved", now.minusDays(10))
+                            new ApprovalRecord(ApprovalStage.DEPARTMENT, departmentA.id(), departmentA.fullName(), true, "Department approved", now.minusDays(10))
                     )
             );
 
             topics.put(1L, pendingTeacherTopic);
             topics.put(2L, availableTeacherTopic);
             topics.put(3L, approvedStudentTopic);
+            topics.put(4L, availableTeacherTopicB);
+            topics.put(5L, availableTeacherTopicC);
 
             List<WeeklyTask> seededTasks = java.util.stream.IntStream.rangeClosed(1, 15)
                     .mapToObj(week -> new WeeklyTask(week, "Week " + week, "Deliverable " + week, "Focus " + week))
@@ -129,7 +170,7 @@ public class TestWorkflowRepositoryConfig {
                     seededTasks,
                     List.of(
                             new ApprovalRecord(ApprovalStage.TEACHER, teacherA.id(), teacherA.fullName(), true, "Teacher approved", now.minusDays(9)),
-                            new ApprovalRecord(ApprovalStage.DEPARTMENT, department.id(), department.fullName(), true, "Department approved", now.minusDays(8))
+                            new ApprovalRecord(ApprovalStage.DEPARTMENT, departmentA.id(), departmentA.fullName(), true, "Department approved", now.minusDays(8))
                     ),
                     now.minusDays(10),
                     now.minusDays(8)
@@ -138,7 +179,7 @@ public class TestWorkflowRepositoryConfig {
             plans.put(1L, approvedPlan);
             reviews.put(1L, new Review(1L, approvedPlan.id(), 4, teacherA.id(), teacherA.fullName(), 92, "Судалгааны хэсэг сайн.", now.minusDays(1)));
             notifications.put(1L, new Notification(1L, studentB.id(), "Төлөвлөгөө батлагдсан", "15 долоо хоногийн төлөвлөгөөг тэнхим баталгаажууллаа.", now.minusHours(6)));
-            audits.put(1L, new AuditEntry(1L, "PLAN", approvedPlan.id(), "PLAN_APPROVED", department.fullName(), "Тэнхим төлөвлөгөөг эцэслэн баталлаа.", now.minusHours(6)));
+            audits.put(1L, new AuditEntry(1L, "PLAN", approvedPlan.id(), "PLAN_APPROVED", departmentA.fullName(), "Тэнхим төлөвлөгөөг эцэслэн баталлаа.", now.minusHours(6)));
         }
 
         @Override

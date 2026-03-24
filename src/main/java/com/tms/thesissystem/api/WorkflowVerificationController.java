@@ -104,13 +104,13 @@ public class WorkflowVerificationController {
 
     @PostMapping("/plans/teacher-approvals")
     public ApiDtos.DashboardResponse teacherApprovesPlan(@RequestBody PlanApprovalRequest request) {
-        commandService.teacherDecisionOnPlan(request.planId(), request.actorId(), request.approved(), request.note());
+        commandService.teacherDecisionOnPlan(request.planId(), request.resolvedActorId(), request.approved(), request.note());
         return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
     @PostMapping("/plans/department-approvals")
     public ApiDtos.DashboardResponse departmentApprovesPlan(@RequestBody PlanApprovalRequest request) {
-        commandService.departmentDecisionOnPlan(request.planId(), request.actorId(), request.approved(), request.note());
+        commandService.departmentDecisionOnPlan(request.planId(), request.resolvedActorId(), request.approved(), request.note());
         return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
     }
 
@@ -150,6 +150,16 @@ public class WorkflowVerificationController {
     public record StudentPlanRequest(Long studentId, Long topicId, List<WeeklyTaskRequest> tasks) { }
     public record WeeklyTaskRequest(int week, String title, String deliverable, String focus) { }
     public record PlanSubmitRequest(Long planId, Long studentId) { }
-    public record PlanApprovalRequest(Long planId, Long actorId, boolean approved, String note) { }
+    public record PlanApprovalRequest(Long planId, Long actorId, Long teacherId, Long departmentId, boolean approved, String note) {
+        public Long resolvedActorId() {
+            if (actorId != null) {
+                return actorId;
+            }
+            if (teacherId != null) {
+                return teacherId;
+            }
+            return departmentId;
+        }
+    }
 
 }

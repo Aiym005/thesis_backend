@@ -67,7 +67,13 @@ public class Topic {
             throw new IllegalStateException("Багшийн баталгаажуулалт хүлээж байгаа сэдэв биш байна.");
         }
         approvals.add(new ApprovalRecord(ApprovalStage.TEACHER, teacher.id(), teacher.fullName(), approved, note, now));
-        status = approved ? TopicStatus.PENDING_DEPARTMENT_APPROVAL : TopicStatus.REJECTED;
+        if (approved) {
+            status = TopicStatus.PENDING_DEPARTMENT_APPROVAL;
+        } else if (proposerRole == UserRole.TEACHER && ownerStudentId != null) {
+            releaseToCatalog();
+        } else {
+            status = TopicStatus.REJECTED;
+        }
         updatedAt = now;
     }
 
@@ -89,9 +95,28 @@ public class Topic {
             this.advisorTeacherName = advisorTeacherName;
             this.status = TopicStatus.APPROVED;
         } else {
-            this.status = TopicStatus.REJECTED;
+            if (proposerRole == UserRole.TEACHER && ownerStudentId != null) {
+                releaseToCatalog();
+            } else {
+                this.status = TopicStatus.REJECTED;
+            }
         }
         updatedAt = now;
+    }
+
+    public void supersede(LocalDateTime now) {
+        ownerStudentId = null;
+        ownerStudentName = null;
+        advisorTeacherId = null;
+        advisorTeacherName = null;
+        status = TopicStatus.SUPERSEDED;
+        updatedAt = now;
+    }
+
+    private void releaseToCatalog() {
+        ownerStudentId = null;
+        ownerStudentName = null;
+        status = TopicStatus.AVAILABLE;
     }
 
     public Long id() { return id; }

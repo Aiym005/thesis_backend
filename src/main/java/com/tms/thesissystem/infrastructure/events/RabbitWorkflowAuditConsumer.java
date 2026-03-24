@@ -1,21 +1,22 @@
 package com.tms.thesissystem.infrastructure.events;
 
 import com.tms.thesissystem.application.event.WorkflowEvent;
+import com.tms.thesissystem.config.RabbitMqConfig;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(name = "app.messaging.rabbit.enabled", havingValue = "false", matchIfMissing = true)
-public class WorkflowAuditListener {
+@ConditionalOnProperty(name = "app.messaging.rabbit.enabled", havingValue = "true")
+public class RabbitWorkflowAuditConsumer {
     private final WorkflowEventProjectionService projectionService;
 
-    public WorkflowAuditListener(WorkflowEventProjectionService projectionService) {
+    public RabbitWorkflowAuditConsumer(WorkflowEventProjectionService projectionService) {
         this.projectionService = projectionService;
     }
 
-    @EventListener
-    public void onWorkflowEvent(WorkflowEvent event) {
+    @RabbitListener(queues = RabbitMqConfig.AUDIT_QUEUE)
+    public void consume(WorkflowEvent event) {
         projectionService.storeAuditEntry(event);
     }
 }

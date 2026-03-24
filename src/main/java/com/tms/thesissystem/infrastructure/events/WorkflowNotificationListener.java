@@ -1,24 +1,21 @@
 package com.tms.thesissystem.infrastructure.events;
 
 import com.tms.thesissystem.application.event.WorkflowEvent;
-import com.tms.thesissystem.application.port.WorkflowRepository;
-import com.tms.thesissystem.domain.model.Notification;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(name = "app.messaging.rabbit.enabled", havingValue = "false", matchIfMissing = true)
 public class WorkflowNotificationListener {
-    private final WorkflowRepository repository;
+    private final WorkflowEventProjectionService projectionService;
 
-    public WorkflowNotificationListener(WorkflowRepository repository) {
-        this.repository = repository;
+    public WorkflowNotificationListener(WorkflowEventProjectionService projectionService) {
+        this.projectionService = projectionService;
     }
 
     @EventListener
     public void onWorkflowEvent(WorkflowEvent event) {
-        for (Long recipientId : event.recipientIds()) {
-            repository.saveNotification(new Notification(repository.nextNotificationId(), recipientId,
-                    event.notificationTitle(), event.notificationMessage(), event.occurredAt()));
-        }
+        projectionService.storeNotifications(event);
     }
 }

@@ -62,6 +62,7 @@ public class ApiResponseMapper {
     }
 
     public ApiDtos.TopicDto toTopicDto(Topic topic) {
+        String exposedStatus = topic.status() == TopicStatus.AVAILABLE ? TopicStatus.APPROVED.name() : topic.status().name();
         return new ApiDtos.TopicDto(
                 topic.id(),
                 topic.title(),
@@ -74,7 +75,7 @@ public class ApiResponseMapper {
                 topic.ownerStudentName(),
                 topic.advisorTeacherId(),
                 topic.advisorTeacherName(),
-                topic.status().name(),
+                exposedStatus,
                 topic.createdAt(),
                 topic.updatedAt(),
                 topic.approvals().stream().map(this::toApprovalRecordDto).toList()
