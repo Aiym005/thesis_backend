@@ -42,6 +42,9 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
     private static final long STUDENT_OFFSET = 100_000L;
     private static final long TEACHER_OFFSET = 200_000L;
     private static final long DEPARTMENT_OFFSET = 300_000L;
+    private static final String SOFTWARE_ENGINEERING = "Software Engineering";
+    private static final int MIN_STUDENT_COUNT = 100;
+    private static final int MIN_TEACHER_COUNT = 20;
 
     private final String url;
     private final String username;
@@ -49,11 +52,18 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final Map<Long, Review> reviews = new LinkedHashMap<>();
-    private final Map<Long, Notification> notifications = new LinkedHashMap<>();
     private final Map<Long, AuditEntry> audits = new LinkedHashMap<>();
     private final AtomicLong reviewSequence = new AtomicLong(3100);
     private final AtomicLong notificationSequence = new AtomicLong(4100);
     private final AtomicLong auditSequence = new AtomicLong(5100);
+
+    private record SeedStudent(String firstName, String lastName, String email, String program, String sisiId) {
+        String fullName() { return firstName + " " + lastName; }
+    }
+
+    private record SeedTeacher(String firstName, String lastName, String email, String loginId) {
+        String fullName() { return firstName + " " + lastName; }
+    }
 
     public InMemoryWorkflowRepository(@Value("${app.database.url}") String url,
                                       @Value("${app.database.username}") String username,
@@ -61,8 +71,39 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
         this.url = url;
         this.username = username;
         this.password = password;
+        ensureProjectionTables();
         seedIfEmpty();
+        syncNotificationSequence();
         reconcileApprovedTopicsPerStudent();
+    }
+
+    private void ensureProjectionTables() {
+        try (Connection connection = getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("""
+                    create table if not exists workflow_notification (
+                        id bigint primary key,
+                        user_id bigint not null,
+                        title text not null,
+                        message text not null,
+                        created_at timestamp not null
+                    )
+                    """);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Failed to initialize projection tables", exception);
+        }
+    }
+
+    private void syncNotificationSequence() {
+        try (Connection connection = getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("select coalesce(max(id), 4100) from workflow_notification")) {
+            if (resultSet.next()) {
+                notificationSequence.set(resultSet.getLong(1));
+            }
+        } catch (Exception exception) {
+            throw new IllegalStateException("Failed to sync notification sequence", exception);
+        }
     }
 
     private void seedIfEmpty() {
@@ -72,18 +113,23 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
             resultSet.next();
             connection.setAutoCommit(false);
             try {
+                List<SeedStudent> students = studentSeeds();
+                List<SeedTeacher> teachers = teacherSeeds();
                 if (resultSet.getInt(1) == 0) {
-                    long softwareEngineeringDepartmentId = insertDepartment(connection, "Software Engineering");
-                    long informationSystemsDepartmentId = insertDepartment(connection, "Information Systems");
-                    long dataScienceDepartmentId = insertDepartment(connection, "Data Science");
+                    long softwareEngineeringDepartmentId = insertDepartment(connection, SOFTWARE_ENGINEERING);
 
-                    long studentAId = insertStudent(connection, softwareEngineeringDepartmentId, "Anu", "Bat", "anu@tms.mn", "B.SE", "22B1NUM0027");
-                    long studentBId = insertStudent(connection, softwareEngineeringDepartmentId, "Temuulen", "Dorj", "temuulen@tms.mn", "B.SE", "22B1NUM0028");
-                    long studentCId = insertStudent(connection, informationSystemsDepartmentId, "Nomin", "Erdene", "nomin@tms.mn", "B.IS", "22B1NUM0029");
+                    long studentAId = insertStudent(connection, softwareEngineeringDepartmentId, students.get(0));
+                    long studentBId = insertStudent(connection, softwareEngineeringDepartmentId, students.get(1));
+                    for (int index = 2; index < students.size(); index++) {
+                        insertStudent(connection, softwareEngineeringDepartmentId, students.get(index));
+                    }
 
-                    long teacherAId = insertTeacher(connection, softwareEngineeringDepartmentId, "Enkh", "Suren", "enkh@tms.mn");
-                    long teacherBId = insertTeacher(connection, softwareEngineeringDepartmentId, "Bolor", "Naran", "bolor@tms.mn");
-                    long teacherCId = insertTeacher(connection, dataScienceDepartmentId, "Saruul", "Munkh", "saruul@tms.mn");
+                    long teacherAId = insertTeacher(connection, softwareEngineeringDepartmentId, teachers.get(0));
+                    long teacherBId = insertTeacher(connection, softwareEngineeringDepartmentId, teachers.get(1));
+                    long teacherCId = insertTeacher(connection, softwareEngineeringDepartmentId, teachers.get(2));
+                    for (int index = 3; index < teachers.size(); index++) {
+                        insertTeacher(connection, softwareEngineeringDepartmentId, teachers.get(index));
+                    }
 
                     ensureCatalogTopic(connection, teacherAId, "B.SE", "AI-based Thesis Workflow Automation",
                             "Дипломын сэдэв дэвшүүлэлт, баталгаажуулалт, явцын хяналтыг автоматжуулах.");
@@ -95,13 +141,13 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
                     long approvedTopicId = insertTopic(connection, studentBId, UserRole.STUDENT, "B.SE", TopicStatus.APPROVED,
                             payload("Layered Architecture for Graduation Management",
                                     "Тэнхим, багш, оюутны approval flow-тай систем боловсруулах.",
-                                    studentBId, "Temuulen Dorj", teacherAId, "Enkh Suren", List.of()));
+                                    studentBId, students.get(1).fullName(), teacherAId, teachers.get(0).fullName(), List.of()));
                     insertTopicRequest(connection, approvedTopicId, studentBId, UserRole.STUDENT, true, "Seed request");
 
                     long pendingTeacherTopicId = insertTopic(connection, studentAId, UserRole.STUDENT, "B.SE", TopicStatus.PENDING_TEACHER_APPROVAL,
                             payload("Distributed Thesis Workflow",
                                     "Оюутны санал болгосон дипломын workflow automation сэдэв.",
-                                    studentAId, "Anu Bat", null, null, List.of()));
+                                    studentAId, students.get(0).fullName(), null, null, List.of()));
                     insertTopicRequest(connection, pendingTeacherTopicId, studentAId, UserRole.STUDENT, true, "Seed pending teacher request");
 
                     long planId = insertPlan(connection, approvedTopicId, studentBId, PlanStatus.APPROVED);
@@ -114,10 +160,10 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
                     insertPlanResponse(connection, planId, teacherAId, "TEACHER", "APPROVED", "Seed teacher approval");
                     insertPlanResponse(connection, planId, softwareEngineeringDepartmentId, "DEPARTMENT", "APPROVED", "Seed department approval");
 
-                    reviews.put(3001L, new Review(3001L, planId, 4, encodeUserId(UserRole.TEACHER, teacherAId), "Enkh Suren", 92,
+                    reviews.put(3001L, new Review(3001L, planId, 4, encodeUserId(UserRole.TEACHER, teacherAId), teachers.get(0).fullName(), 92,
                             "Судалгааны хэсэг сайн, implementation-ийн architecture section-ийг гүнзгийрүүл.", LocalDateTime.now().minusDays(1)));
-                    notifications.put(4001L, new Notification(4001L, encodeUserId(UserRole.STUDENT, studentBId), "Төлөвлөгөө батлагдсан",
-                            "15 долоо хоногийн төлөвлөгөөг тэнхим баталгаажууллаа.", LocalDateTime.now().minusHours(6)));
+                    insertWorkflowNotification(connection, 4001L, encodeUserId(UserRole.STUDENT, studentBId), "Төлөвлөгөө батлагдсан",
+                            "15 долоо хоногийн төлөвлөгөөг тэнхим баталгаажууллаа.", LocalDateTime.now().minusHours(6));
                     audits.put(5001L, new AuditEntry(5001L, "PLAN", planId, "PLAN_APPROVED", "SE Department",
                             "Тэнхим төлөвлөгөөг эцэслэн баталж review phase-ийг нээлээ.", LocalDateTime.now().minusHours(6)));
                 }
@@ -137,17 +183,49 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
     }
 
     private void ensureUsersForExistingData(Connection connection) throws Exception {
-        long softwareEngineeringDepartmentId = findOrCreateDepartment(connection, "Software Engineering");
-        long informationSystemsDepartmentId = findOrCreateDepartment(connection, "Information Systems");
-        long dataScienceDepartmentId = findOrCreateDepartment(connection, "Data Science");
+        long softwareEngineeringDepartmentId = findOrCreateDepartment(connection, SOFTWARE_ENGINEERING);
+        normalizeDepartmentAssignments(connection, softwareEngineeringDepartmentId);
+        ensureMinimumStudents(connection, softwareEngineeringDepartmentId);
+        ensureMinimumTeachers(connection, softwareEngineeringDepartmentId);
+    }
 
-        ensureStudent(connection, softwareEngineeringDepartmentId, "Anu", "Bat", "anu@tms.mn", "B.SE", "22B1NUM0027");
-        ensureStudent(connection, softwareEngineeringDepartmentId, "Temuulen", "Dorj", "temuulen@tms.mn", "B.SE", "22B1NUM0028");
-        ensureStudent(connection, informationSystemsDepartmentId, "Nomin", "Erdene", "nomin@tms.mn", "B.IS", "22B1NUM0029");
+    private void normalizeDepartmentAssignments(Connection connection, long departmentId) throws Exception {
+        try (PreparedStatement ps = connection.prepareStatement("update student set dep_id = ? where dep_id <> ? or dep_id is null")) {
+            ps.setLong(1, departmentId);
+            ps.setLong(2, departmentId);
+            ps.executeUpdate();
+        }
+        try (PreparedStatement ps = connection.prepareStatement("update teacher set dep_id = ? where dep_id <> ? or dep_id is null")) {
+            ps.setLong(1, departmentId);
+            ps.setLong(2, departmentId);
+            ps.executeUpdate();
+        }
+    }
 
-        ensureTeacher(connection, softwareEngineeringDepartmentId, "Enkh", "Suren", "enkh@tms.mn");
-        ensureTeacher(connection, softwareEngineeringDepartmentId, "Bolor", "Naran", "bolor@tms.mn");
-        ensureTeacher(connection, dataScienceDepartmentId, "Saruul", "Munkh", "saruul@tms.mn");
+    private void ensureMinimumStudents(Connection connection, long departmentId) throws Exception {
+        List<Long> existingIds = existingStudentIds(connection);
+        List<SeedStudent> seeds = studentSeeds();
+        for (int index = 0; index < seeds.size(); index++) {
+            SeedStudent seed = seeds.get(index);
+            if (index < existingIds.size()) {
+                updateStudent(connection, existingIds.get(index), departmentId, seed);
+            } else {
+                insertStudent(connection, departmentId, seed);
+            }
+        }
+    }
+
+    private void ensureMinimumTeachers(Connection connection, long departmentId) throws Exception {
+        List<Long> existingIds = existingTeacherIds(connection);
+        List<SeedTeacher> seeds = teacherSeeds();
+        for (int index = 0; index < seeds.size(); index++) {
+            SeedTeacher seed = seeds.get(index);
+            if (index < existingIds.size()) {
+                updateTeacher(connection, existingIds.get(index), departmentId, seed);
+            } else {
+                insertTeacher(connection, departmentId, seed);
+            }
+        }
     }
 
     private long findOrCreateDepartment(Connection connection, String name) throws Exception {
@@ -162,34 +240,11 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
         return insertDepartment(connection, name);
     }
 
-    private void ensureStudent(Connection connection, long depId, String firstName, String lastName, String mail, String program, String sisiId) throws Exception {
-        try (PreparedStatement ps = connection.prepareStatement("select id from student where mail = ?")) {
-            ps.setString(1, mail);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return;
-                }
-            }
-        }
-        insertStudent(connection, depId, firstName, lastName, mail, program, sisiId);
-    }
-
-    private void ensureTeacher(Connection connection, long depId, String firstName, String lastName, String mail) throws Exception {
-        try (PreparedStatement ps = connection.prepareStatement("select id from teacher where mail = ?")) {
-            ps.setString(1, mail);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return;
-                }
-            }
-        }
-        insertTeacher(connection, depId, firstName, lastName, mail);
-    }
-
     private void ensureCatalogTopicsForExistingData(Connection connection) throws Exception {
-        Long teacherAId = findTeacherIdByEmail(connection, "enkh@tms.mn");
-        Long teacherBId = findTeacherIdByEmail(connection, "bolor@tms.mn");
-        Long teacherCId = findTeacherIdByEmail(connection, "saruul@tms.mn");
+        List<SeedTeacher> teachers = teacherSeeds();
+        Long teacherAId = findTeacherIdByEmail(connection, teachers.get(0).email());
+        Long teacherBId = findTeacherIdByEmail(connection, teachers.get(1).email());
+        Long teacherCId = findTeacherIdByEmail(connection, teachers.get(2).email());
 
         if (countAvailableTopics(connection) == 0) {
             if (teacherAId != null) {
@@ -265,21 +320,49 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
         List<User> users = new ArrayList<>();
         try (Connection connection = getConnection()) {
             try (Statement statement = connection.createStatement();
-                 ResultSet rs = statement.executeQuery("select s.id, s.firstname, s.lastname, s.mail, s.program, d.name from student s left join department d on d.id = s.dep_id order by s.id")) {
+                 ResultSet rs = statement.executeQuery("select s.id, s.firstname, s.lastname, s.mail, s.program, s.sisi_id, d.name from student s left join department d on d.id = s.dep_id order by s.id")) {
                 while (rs.next()) {
-                    users.add(new User(encodeUserId(UserRole.STUDENT, rs.getLong(1)), UserRole.STUDENT, rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(6), rs.getString(5)));
+                    users.add(new User(
+                            encodeUserId(UserRole.STUDENT, rs.getLong(1)),
+                            UserRole.STUDENT,
+                            rs.getString(6),
+                            rs.getString(2),
+                            rs.getString(3),
+                            rs.getString(4),
+                            rs.getString(7),
+                            rs.getString(5)
+                    ));
                 }
             }
             try (Statement statement = connection.createStatement();
                  ResultSet rs = statement.executeQuery("select t.id, t.firstname, t.lastname, t.mail, d.name from teacher t left join department d on d.id = t.dep_id order by t.id")) {
                 while (rs.next()) {
-                    users.add(new User(encodeUserId(UserRole.TEACHER, rs.getLong(1)), UserRole.TEACHER, rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), null));
+                    long rawId = rs.getLong(1);
+                    users.add(new User(
+                            encodeUserId(UserRole.TEACHER, rawId),
+                            UserRole.TEACHER,
+                            teacherLoginId(rawId),
+                            rs.getString(2),
+                            rs.getString(3),
+                            rs.getString(4),
+                            rs.getString(5),
+                            "B.SE"
+                    ));
                 }
             }
             try (Statement statement = connection.createStatement();
                  ResultSet rs = statement.executeQuery("select id, name from department order by id limit 1")) {
                 while (rs.next()) {
-                    users.add(new User(encodeUserId(UserRole.DEPARTMENT, rs.getLong(1)), UserRole.DEPARTMENT, rs.getString(2), "Department", rs.getString(2).toLowerCase().replace(" ", "") + "@tms.mn", rs.getString(2), null));
+                    users.add(new User(
+                            encodeUserId(UserRole.DEPARTMENT, rs.getLong(1)),
+                            UserRole.DEPARTMENT,
+                            "sisi-admin",
+                            rs.getString(2),
+                            "Department",
+                            "sisi.admin@tms.mn",
+                            rs.getString(2),
+                            "B.SE"
+                    ));
                 }
             }
         } catch (Exception exception) {
@@ -480,12 +563,32 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
 
     @Override
     public synchronized List<Notification> findAllNotifications() {
-        return notifications.values().stream().sorted(Comparator.comparing(Notification::createdAt).reversed()).toList();
+        List<Notification> result = new ArrayList<>();
+        try (Connection connection = getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery("select id, user_id, title, message, created_at from workflow_notification order by created_at desc, id desc")) {
+            while (rs.next()) {
+                result.add(new Notification(
+                        rs.getLong("id"),
+                        rs.getLong("user_id"),
+                        rs.getString("title"),
+                        rs.getString("message"),
+                        rs.getTimestamp("created_at").toLocalDateTime()
+                ));
+            }
+        } catch (Exception exception) {
+            throw new IllegalStateException("Failed to load notifications", exception);
+        }
+        return result;
     }
 
     @Override
     public synchronized Notification saveNotification(Notification notification) {
-        notifications.put(notification.id(), notification);
+        try (Connection connection = getConnection()) {
+            insertWorkflowNotification(connection, notification.id(), notification.userId(), notification.title(), notification.message(), notification.createdAt());
+        } catch (Exception exception) {
+            throw new IllegalStateException("Failed to save notification", exception);
+        }
         return notification;
     }
 
@@ -518,6 +621,42 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
         try (Connection connection = getConnection()) {
             insertPlanResponse(connection, auditEntry.entityId(), decodeUserId(actor.role(), actor.id()), stage.name(), result, auditEntry.detail());
         } catch (Exception ignored) {
+        }
+    }
+
+    private void insertWorkflowNotification(Connection connection, Long id, Long userId, String title, String message, LocalDateTime createdAt) throws Exception {
+        try (PreparedStatement check = connection.prepareStatement("select count(*) from workflow_notification where id = ?")) {
+            check.setLong(1, id);
+            try (ResultSet rs = check.executeQuery()) {
+                rs.next();
+                if (rs.getInt(1) > 0) {
+                    try (PreparedStatement update = connection.prepareStatement("""
+                            update workflow_notification
+                            set user_id = ?, title = ?, message = ?, created_at = ?
+                            where id = ?
+                            """)) {
+                        update.setLong(1, userId);
+                        update.setString(2, title);
+                        update.setString(3, message);
+                        update.setTimestamp(4, java.sql.Timestamp.valueOf(createdAt));
+                        update.setLong(5, id);
+                        update.executeUpdate();
+                    }
+                    return;
+                }
+            }
+        }
+
+        try (PreparedStatement ps = connection.prepareStatement("""
+                insert into workflow_notification(id, user_id, title, message, created_at)
+                values (?, ?, ?, ?, ?)
+                """)) {
+            ps.setLong(1, id);
+            ps.setLong(2, userId);
+            ps.setString(3, title);
+            ps.setString(4, message);
+            ps.setTimestamp(5, java.sql.Timestamp.valueOf(createdAt));
+            ps.executeUpdate();
         }
     }
 
@@ -647,6 +786,10 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
         }
     }
 
+    private long insertStudent(Connection connection, long depId, SeedStudent student) throws Exception {
+        return insertStudent(connection, depId, student.firstName(), student.lastName(), student.email(), student.program(), student.sisiId());
+    }
+
     private long insertStudent(Connection connection, long depId, String firstName, String lastName, String mail, String program, String sisiId) throws Exception {
         try (PreparedStatement ps = connection.prepareStatement("""
                 insert into student(dep_id, firstname, lastname, mail, program, sisi_id, is_choosed, proposed_number)
@@ -666,6 +809,10 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
                 return rs.getLong(1);
             }
         }
+    }
+
+    private long insertTeacher(Connection connection, long depId, SeedTeacher teacher) throws Exception {
+        return insertTeacher(connection, depId, teacher.firstName(), teacher.lastName(), teacher.email());
     }
 
     private long insertTeacher(Connection connection, long depId, String firstName, String lastName, String mail) throws Exception {
@@ -907,5 +1054,196 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
 
     private Long decodeNullableUserId(UserRole role, Long encodedId) {
         return encodedId == null ? null : decodeUserId(role, encodedId);
+    }
+
+    private String teacherLoginId(long rawId) {
+        return "tch" + String.format("%03d", rawId);
+    }
+
+    private List<Long> existingStudentIds(Connection connection) throws Exception {
+        List<Long> ids = new ArrayList<>();
+        try (PreparedStatement ps = connection.prepareStatement("select id from student order by id");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                ids.add(rs.getLong(1));
+            }
+        }
+        return ids;
+    }
+
+    private List<Long> existingTeacherIds(Connection connection) throws Exception {
+        List<Long> ids = new ArrayList<>();
+        try (PreparedStatement ps = connection.prepareStatement("select id from teacher order by id");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                ids.add(rs.getLong(1));
+            }
+        }
+        return ids;
+    }
+
+    private void updateStudent(Connection connection, long id, long depId, SeedStudent student) throws Exception {
+        try (PreparedStatement ps = connection.prepareStatement("""
+                update student
+                set dep_id = ?, firstname = ?, lastname = ?, mail = ?, program = ?, sisi_id = ?, is_choosed = ?, proposed_number = ?
+                where id = ?
+                """)) {
+            ps.setLong(1, depId);
+            ps.setString(2, student.firstName());
+            ps.setString(3, student.lastName());
+            ps.setString(4, student.email());
+            ps.setString(5, student.program());
+            ps.setString(6, student.sisiId());
+            ps.setBoolean(7, false);
+            ps.setInt(8, 0);
+            ps.setLong(9, id);
+            ps.executeUpdate();
+        }
+    }
+
+    private void updateTeacher(Connection connection, long id, long depId, SeedTeacher teacher) throws Exception {
+        try (PreparedStatement ps = connection.prepareStatement("""
+                update teacher
+                set dep_id = ?, firstname = ?, lastname = ?, mail = ?, num_of_choosed_stud = ?
+                where id = ?
+                """)) {
+            ps.setLong(1, depId);
+            ps.setString(2, teacher.firstName());
+            ps.setString(3, teacher.lastName());
+            ps.setString(4, teacher.email());
+            ps.setInt(5, 0);
+            ps.setLong(6, id);
+            ps.executeUpdate();
+        }
+    }
+
+    private List<SeedStudent> studentSeeds() {
+        return List.of(
+                new SeedStudent("Ану", "Бат-Эрдэнэ", "anu.bat-erdene@tms.mn", "B.SE", "22b1num0027"),
+                new SeedStudent("Тэмүүлэн", "Дорж", "temuulen.dorj@tms.mn", "B.SE", "22b1num0028"),
+                new SeedStudent("Номин", "Эрдэнэ", "nomin.erdene@tms.mn", "B.SE", "22b1num0029"),
+                new SeedStudent("Марал", "Мөнхбат", "maral.munkhbat@tms.mn", "B.SE", "22b1num0030"),
+                new SeedStudent("Энхжин", "Ганзориг", "enkhjin.ganzorig@tms.mn", "B.SE", "22b1num0031"),
+                new SeedStudent("Билгүүн", "Түвшинжаргал", "bilguun.tuvshinjargal@tms.mn", "B.SE", "22b1num0032"),
+                new SeedStudent("Сувд", "Лхагвасүрэн", "suvd.lkhagvasuren@tms.mn", "B.SE", "22b1num0033"),
+                new SeedStudent("Одгэрэл", "Батсүх", "odgerel.batsukh@tms.mn", "B.SE", "22b1num0034"),
+                new SeedStudent("Мөнхжин", "Пүрэвдорж", "munkhjin.purevdorj@tms.mn", "B.SE", "22b1num0035"),
+                new SeedStudent("Уянга", "Сандаг", "uyanga.sandag@tms.mn", "B.SE", "22b1num0036"),
+                new SeedStudent("Төгөлдөр", "Алтанхуяг", "tuguldur.altankhuyag@tms.mn", "B.SE", "22b1num0037"),
+                new SeedStudent("Хүслэн", "Очирбат", "khuslen.ochirbat@tms.mn", "B.SE", "22b1num0038"),
+                new SeedStudent("Ариунболд", "Нямдорж", "ariunbold.nyamdorj@tms.mn", "B.SE", "22b1num0039"),
+                new SeedStudent("Намуун", "Жаргалсайхан", "namuun.jargalsaikhan@tms.mn", "B.SE", "22b1num0040"),
+                new SeedStudent("Бат-Оргил", "Эрдэнэбат", "bat-orgil.erdenebat@tms.mn", "B.SE", "22b1num0041"),
+                new SeedStudent("Дөлгөөн", "Мягмарсүрэн", "dulguun.myagmarsuren@tms.mn", "B.SE", "22b1num0042"),
+                new SeedStudent("Жавхлан", "Бямбасүрэн", "javkhlan.byambasuren@tms.mn", "B.SE", "22b1num0043"),
+                new SeedStudent("Пүрэвсүрэн", "Ганбат", "purevsuren.ganbat@tms.mn", "B.SE", "22b1num0044"),
+                new SeedStudent("Саруул", "Даваажав", "saruul.davaajav@tms.mn", "B.SE", "22b1num0045"),
+                new SeedStudent("Анхбаяр", "Болдбаатар", "ankhbayar.boldbaatar@tms.mn", "B.SE", "22b1num0046"),
+                new SeedStudent("Мишээл", "Төмөрбаатар", "misheel.tumurbaatar@tms.mn", "B.SE", "22b1num0047"),
+                new SeedStudent("Амин-Эрдэнэ", "Цогтбаяр", "amin-erdene.tsogtbayar@tms.mn", "B.SE", "22b1num0048"),
+                new SeedStudent("Ивээл", "Энхтүвшин", "iveel.enkhtuvshin@tms.mn", "B.SE", "22b1num0049"),
+                new SeedStudent("Сэцэн", "Баттулга", "setsen.battulga@tms.mn", "B.SE", "22b1num0050"),
+                new SeedStudent("Тэнүүн", "Адьяа", "tenuun.adiyaa@tms.mn", "B.SE", "22b1num0051"),
+                new SeedStudent("Гэгээ", "Чинзориг", "gegee.chinzorig@tms.mn", "B.SE", "22b1num0052"),
+                new SeedStudent("Хонгор", "Амарбаясгалан", "khongor.amarbayasgalan@tms.mn", "B.SE", "22b1num0053"),
+                new SeedStudent("Мөнгөнцэцэг", "Самдан", "munguntsetseg.samdan@tms.mn", "B.SE", "22b1num0054"),
+                new SeedStudent("Эрдэнэсувд", "Рэнцэн", "erdenesuvd.rentsen@tms.mn", "B.SE", "22b1num0055"),
+                new SeedStudent("Тэлмүүн", "Цэрэндаш", "telmuun.tserendash@tms.mn", "B.SE", "22b1num0056"),
+                new SeedStudent("Ариунзул", "Гомбосүрэн", "ariunzul.gombosuren@tms.mn", "B.SE", "22b1num0057"),
+                new SeedStudent("Хулан", "Лувсан", "khulan.luvsan@tms.mn", "B.SE", "22b1num0058"),
+                new SeedStudent("Мөнхтөр", "Сүхбаатар", "munkhtur.sukhbaatar@tms.mn", "B.SE", "22b1num0059"),
+                new SeedStudent("Содном", "Чулуунбат", "sodnom.chuluunbat@tms.mn", "B.SE", "22b1num0060"),
+                new SeedStudent("Ирмүүн", "Цэндсүрэн", "irmuun.tsendsuren@tms.mn", "B.SE", "22b1num0061"),
+                new SeedStudent("Наранзул", "Очирхуяг", "naranzul.ochirkhuyag@tms.mn", "B.SE", "22b1num0062"),
+                new SeedStudent("Тэмүүжин", "Галбадрах", "temuujin.galbadrah@tms.mn", "B.SE", "22b1num0063"),
+                new SeedStudent("Сэлэнгэ", "Гэрэлтуяа", "selenge.gereltuya@tms.mn", "B.SE", "22b1num0064"),
+                new SeedStudent("Даваахүү", "Цогзолмаа", "davaakhuu.tsogzolmaa@tms.mn", "B.SE", "22b1num0065"),
+                new SeedStudent("Оюунчимэг", "Төрбат", "oyuunchimeg.turbat@tms.mn", "B.SE", "22b1num0066"),
+                new SeedStudent("Баянмөнх", "Эрдэнэчимэг", "bayanmunkh.erdenechimeg@tms.mn", "B.SE", "22b1num0067"),
+                new SeedStudent("Цэлмэг", "Сайнбаяр", "tselmeg.sainbayar@tms.mn", "B.SE", "22b1num0068"),
+                new SeedStudent("Ган-Эрдэнэ", "Тогтох", "gan-erdene.togtokh@tms.mn", "B.SE", "22b1num0069"),
+                new SeedStudent("Энэрэл", "Мөнгөншагай", "enerel.mungunshagai@tms.mn", "B.SE", "22b1num0070"),
+                new SeedStudent("Чингүүн", "Отгонбаяр", "chinguun.otgonbayar@tms.mn", "B.SE", "22b1num0071"),
+                new SeedStudent("Алтанзаяа", "Цэрэндолгор", "altanzayaa.tserendolgor@tms.mn", "B.SE", "22b1num0072"),
+                new SeedStudent("Отгончимэг", "Хишигт", "otgonchimeg.khishigt@tms.mn", "B.SE", "22b1num0073"),
+                new SeedStudent("Золбоо", "Түвдэндорж", "zolboo.tuvdendorj@tms.mn", "B.SE", "22b1num0074"),
+                new SeedStudent("Мөнх-Оргил", "Зоригт", "munkh-orgil.zorigt@tms.mn", "B.SE", "22b1num0075"),
+                new SeedStudent("Хулангоо", "Чойжилсүрэн", "khulangoo.choijilsuren@tms.mn", "B.SE", "22b1num0076"),
+                new SeedStudent("Ундрах", "Энх-Амгалан", "undrakh.enkh-amgalan@tms.mn", "B.SE", "22b1num0077"),
+                new SeedStudent("Батчимэг", "Жамъян", "batchimeg.jamyan@tms.mn", "B.SE", "22b1num0078"),
+                new SeedStudent("Түвшинтөгс", "Наранбаатар", "tuvshintugs.naranbaatar@tms.mn", "B.SE", "22b1num0079"),
+                new SeedStudent("Содгэрэл", "Дашдондог", "sodgerel.dashdondog@tms.mn", "B.SE", "22b1num0080"),
+                new SeedStudent("Баясгалан", "Хүрэлбаатар", "bayasgalan.khurelbaatar@tms.mn", "B.SE", "22b1num0081"),
+                new SeedStudent("Эгшиглэн", "Гончиг", "egshiglen.gonchig@tms.mn", "B.SE", "22b1num0082"),
+                new SeedStudent("Сүндэр", "Эрдэнэпүрэв", "sunder.erdenepurev@tms.mn", "B.SE", "22b1num0083"),
+                new SeedStudent("Төгс-Эрдэнэ", "Насанбуян", "tugs-erdene.nasanbuyan@tms.mn", "B.SE", "22b1num0084"),
+                new SeedStudent("Оюунгэрэл", "Түмэнжаргал", "oyungerel.tumenjargal@tms.mn", "B.SE", "22b1num0085"),
+                new SeedStudent("Золзаяа", "Сэргэлэн", "zolzayaa.sergelen@tms.mn", "B.SE", "22b1num0086"),
+                new SeedStudent("Эрдэнэболд", "Базар", "erdenebold.bazar@tms.mn", "B.SE", "22b1num0087"),
+                new SeedStudent("Мөнхдөл", "Гэрэлчулуун", "munkhdul.gerelchuluun@tms.mn", "B.SE", "22b1num0088"),
+                new SeedStudent("Гэрэлмаа", "Дамбадаржаа", "gerelmaa.dambadarjaa@tms.mn", "B.SE", "22b1num0089"),
+                new SeedStudent("Бадамцэцэг", "Лхасүрэн", "badamtsetseg.lkhasuren@tms.mn", "B.SE", "22b1num0090"),
+                new SeedStudent("Отгонтөгс", "Мөнхсайхан", "otgontugs.munkhsaikhan@tms.mn", "B.SE", "22b1num0091"),
+                new SeedStudent("Сувд-Эрдэнэ", "Борхүү", "suvd-erdene.borkhuu@tms.mn", "B.SE", "22b1num0092"),
+                new SeedStudent("Тэнгэр", "Шинэбаяр", "tenger.shinebayar@tms.mn", "B.SE", "22b1num0093"),
+                new SeedStudent("Гүнжид", "Бумцэнд", "gunjid.bumtsend@tms.mn", "B.SE", "22b1num0094"),
+                new SeedStudent("Жаргалмаа", "Сэржмядаг", "jargalmaa.serjmyadag@tms.mn", "B.SE", "22b1num0095"),
+                new SeedStudent("Чинзориг", "Хатанбаатар", "chinzorig.khatanbaatar@tms.mn", "B.SE", "22b1num0096"),
+                new SeedStudent("Түвшинжаргал", "Эрдэнэ-Очир", "tuvshinjargal.erdene-ochir@tms.mn", "B.SE", "22b1num0097"),
+                new SeedStudent("Энхсаран", "Норов", "enkhsaran.norov@tms.mn", "B.SE", "22b1num0098"),
+                new SeedStudent("Батнасан", "Мэндсайхан", "batnasan.mendsaikhan@tms.mn", "B.SE", "22b1num0099"),
+                new SeedStudent("Солонго", "Цогт", "solongo.tsogt@tms.mn", "B.SE", "22b1num0100"),
+                new SeedStudent("Урангоо", "Даваасамбуу", "urangoo.davaasambuu@tms.mn", "B.SE", "22b1num0101"),
+                new SeedStudent("Эрдэнэзул", "Амгаланбаатар", "erdenezul.amgalanbaatar@tms.mn", "B.SE", "22b1num0102"),
+                new SeedStudent("Батсүрэн", "Нармандах", "batsuren.narmandakh@tms.mn", "B.SE", "22b1num0103"),
+                new SeedStudent("Гантулга", "Төгөлдөр", "gantulga.tuguldur@tms.mn", "B.SE", "22b1num0104"),
+                new SeedStudent("Сарнай", "Отгонсүх", "sarnai.otgonsukh@tms.mn", "B.SE", "22b1num0105"),
+                new SeedStudent("Энхриймаа", "Гомбожав", "enkhriimaa.gombojav@tms.mn", "B.SE", "22b1num0106"),
+                new SeedStudent("Мөнхцацрал", "Батдэлгэр", "munkhtsatsral.batdelger@tms.mn", "B.SE", "22b1num0107"),
+                new SeedStudent("Өлзийжаргал", "Ганпүрэв", "ulziijargal.ganpurev@tms.mn", "B.SE", "22b1num0108"),
+                new SeedStudent("Чимгээ", "Төрмөнх", "chimgee.turmunkh@tms.mn", "B.SE", "22b1num0109"),
+                new SeedStudent("Нарансолонго", "Лхагважав", "naransolongo.lkhagvajav@tms.mn", "B.SE", "22b1num0110"),
+                new SeedStudent("Дэлгэрзаяа", "Баяржаргал", "delgerzayaa.bayarjargal@tms.mn", "B.SE", "22b1num0111"),
+                new SeedStudent("Сүхбат", "Мөнхбаатар", "sukhbat.munkhbaatar@tms.mn", "B.SE", "22b1num0112"),
+                new SeedStudent("Баярцэцэг", "Чинбат", "bayartsetseg.chinbat@tms.mn", "B.SE", "22b1num0113"),
+                new SeedStudent("Оргилуун", "Отгонжаргал", "orgiluun.otgonjargal@tms.mn", "B.SE", "22b1num0114"),
+                new SeedStudent("Анужин", "Цэрэнпил", "anujin.tserenpil@tms.mn", "B.SE", "22b1num0115"),
+                new SeedStudent("Тодгэрэл", "Жигжид", "todgerel.jigjid@tms.mn", "B.SE", "22b1num0116"),
+                new SeedStudent("Цэлмүүн", "Баясгалант", "tselmuun.bayasgalant@tms.mn", "B.SE", "22b1num0117"),
+                new SeedStudent("Сарантуяа", "Гүррагчаа", "sarantuyaa.gurragchaa@tms.mn", "B.SE", "22b1num0118"),
+                new SeedStudent("Амарбаяр", "Нямбуу", "amarbayar.nyambuu@tms.mn", "B.SE", "22b1num0119"),
+                new SeedStudent("Нандин-Эрдэнэ", "Туяацэцэг", "nandin-erdene.tuyaatsetseg@tms.mn", "B.SE", "22b1num0120"),
+                new SeedStudent("Бүтэнбаяр", "Цэнд-Аюуш", "butenbayar.tsend-ayuush@tms.mn", "B.SE", "22b1num0121"),
+                new SeedStudent("Энхмэнд", "Батжаргал", "enkhmend.batjargal@tms.mn", "B.SE", "22b1num0122"),
+                new SeedStudent("Гэрэлсайхан", "Лодой", "gerelsaikhan.lodoi@tms.mn", "B.SE", "22b1num0123"),
+                new SeedStudent("Мишээлт", "Өсөхбаяр", "misheelt.usukhbayar@tms.mn", "B.SE", "22b1num0124"),
+                new SeedStudent("Оюундэлгэр", "Мөнгөнцог", "oyuundelger.munguntsog@tms.mn", "B.SE", "22b1num0125"),
+                new SeedStudent("Тэмүүн", "Баатарсүрэн", "temuun.baatarsuren@tms.mn", "B.SE", "22b1num0126")
+        );
+    }
+
+    private List<SeedTeacher> teacherSeeds() {
+        return List.of(
+                new SeedTeacher("Энх", "Сүрэн", "enkh.suren@tms.mn", "tch001"),
+                new SeedTeacher("Болор", "Наран", "bolor.naran@tms.mn", "tch002"),
+                new SeedTeacher("Саруул", "Мөнх", "saruul.munkh@tms.mn", "tch003"),
+                new SeedTeacher("Ганболд", "Батбаяр", "ganbold.batbayar@tms.mn", "tch004"),
+                new SeedTeacher("Отгонжаргал", "Сүх", "otgonjargal.sukh@tms.mn", "tch005"),
+                new SeedTeacher("Мөнх-Эрдэнэ", "Түвшин", "munkh-erdene.tuvshin@tms.mn", "tch006"),
+                new SeedTeacher("Нарантуяа", "Болд", "narantuya.bold@tms.mn", "tch007"),
+                new SeedTeacher("Батцэцэг", "Эрдэнэбат", "battsetseg.erdenebat@tms.mn", "tch008"),
+                new SeedTeacher("Төгсжаргал", "Гантулга", "tugsjargal.gantulga@tms.mn", "tch009"),
+                new SeedTeacher("Уянга", "Даваа", "uyanga.davaa@tms.mn", "tch010"),
+                new SeedTeacher("Чимгээ", "Батсайхан", "chimgee.batsaikhan@tms.mn", "tch011"),
+                new SeedTeacher("Халиун", "Мөнхтөр", "khaliun.munkhtur@tms.mn", "tch012"),
+                new SeedTeacher("Баярмаа", "Жаргал", "bayarmaa.jargal@tms.mn", "tch013"),
+                new SeedTeacher("Даваадорж", "Энхболд", "davaadorj.enkhbold@tms.mn", "tch014"),
+                new SeedTeacher("Отгонбат", "Лхагва", "otgonbat.lkhagva@tms.mn", "tch015"),
+                new SeedTeacher("Пүрэв", "Очир", "purev.ochir@tms.mn", "tch016"),
+                new SeedTeacher("Солонго", "Баттөр", "solongo.battur@tms.mn", "tch017"),
+                new SeedTeacher("Жавзмаа", "Гэрэл", "javzmaa.gerel@tms.mn", "tch018"),
+                new SeedTeacher("Эрдэнэсайхан", "Төмөр", "erdenesaikhan.tumur@tms.mn", "tch019"),
+                new SeedTeacher("Нямсүрэн", "Алтанхуяг", "nyamsuren.altankhuyag@tms.mn", "tch020")
+        );
     }
 }

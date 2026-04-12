@@ -2,7 +2,8 @@ const state = {
     dashboard: null,
     workflow: null,
     database: null,
-    activeRole: "STUDENT",
+    authUser: null,
+    activeRole: null,
     activeUserId: null,
     page: "dashboard",
     topicMode: "list",
@@ -18,45 +19,38 @@ const roleLabels = {
     DEPARTMENT: "Тэнхим"
 };
 
-const roleSelect = document.getElementById("roleSelect");
-const userSelect = document.getElementById("userSelect");
+const authRoot = document.getElementById("authRoot");
+const appShell = document.getElementById("appShell");
+const logoutButton = document.getElementById("logoutButton");
 const pageRoot = document.getElementById("pageRoot");
 const message = document.getElementById("message");
 const searchInput = document.getElementById("searchInput");
-
-roleSelect.innerHTML = Object.keys(roleLabels)
-    .map(role => `<option value="${role}">${roleLabels[role]}</option>`)
-    .join("");
 
 document.querySelectorAll(".menu button").forEach(button => {
     button.addEventListener("click", () => setActivePage(button.dataset.page));
 });
 
-roleSelect.addEventListener("change", () => {
-    state.activeRole = roleSelect.value;
-    state.topicMode = "list";
-    state.researchMode = "list";
-    state.selectedTopicId = null;
-    if (state.activeRole !== "STUDENT" && state.page === "settings") {
-        setActivePage("settings", false);
-    } else if (state.activeRole !== "STUDENT" && state.page === "research" && state.researchMode === "detail") {
-        setActivePage("dashboard", false);
-    }
-    populateUsers();
-    render();
-});
-
-userSelect.addEventListener("change", () => {
-    state.activeUserId = Number(userSelect.value);
-    state.topicMode = "list";
-    state.researchMode = "list";
-    state.selectedTopicId = null;
-    render();
-});
-
 searchInput.addEventListener("input", () => render());
+logoutButton.addEventListener("click", logout);
 
-loadDashboard();
+boot();
+
+function boot() {
+    const savedUser = sessionStorage.getItem("thesis.authUser");
+    if (!savedUser) {
+        renderAuthScreen();
+        return;
+    }
+
+    try {
+        const authUser = JSON.parse(savedUser);
+        applyAuthenticatedUser(authUser);
+        loadDashboard();
+    } catch (error) {
+        sessionStorage.removeItem("thesis.authUser");
+        renderAuthScreen();
+    }
+}
 
 async function loadDashboard() {
     const [dashboardResponse, workflowResponse, databaseResponse] = await Promise.all([
@@ -68,29 +62,8 @@ async function loadDashboard() {
     state.dashboard = await dashboardResponse.json();
     state.workflow = await workflowResponse.json();
     state.database = databaseResponse ? await databaseResponse.json() : null;
-
-    if (!state.activeUserId) {
-        state.activeUserId = state.dashboard.users.find(user => user.role === state.activeRole)?.id
-            ?? state.dashboard.users.find(user => user.role === "STUDENT")?.id
-            ?? null;
-    }
-
-    populateUsers();
+    state.activeUserId = state.authUser?.id ?? state.activeUserId;
     render();
-}
-
-function populateUsers() {
-    roleSelect.value = state.activeRole;
-    const users = state.dashboard.users.filter(user => user.role === state.activeRole);
-    if (!users.some(user => user.id === state.activeUserId)) {
-        state.activeUserId = users[0]?.id ?? null;
-    }
-    userSelect.innerHTML = users
-        .map(user => `<option value="${user.id}">${user.firstName} ${user.lastName}</option>`)
-        .join("");
-    if (state.activeUserId !== null) {
-        userSelect.value = String(state.activeUserId);
-    }
 }
 
 function setActivePage(page, doRender = true) {
@@ -103,9 +76,12 @@ function setActivePage(page, doRender = true) {
 
 function render() {
     if (!state.dashboard || !state.workflow) return;
+    authRoot.classList.add("hidden");
+    appShell.classList.remove("hidden");
     const user = getActiveUser();
     document.getElementById("profileName").textContent = user ? `${user.firstName} ${user.lastName}` : "-";
     document.getElementById("profileRole").textContent = roleLabels[state.activeRole];
+    document.getElementById("profileLogin").textContent = state.authUser?.username ?? "-";
     pageRoot.innerHTML = renderPage(user);
 }
 
@@ -558,11 +534,12 @@ function renderSettingsPage(user) {
     const notifications = state.dashboard.notifications.filter(item => item.userId === user.id).slice(0, 8);
     return `
         <h1>Тохиргоо</h1>
-        <p class="page-sub">DB connection болон workflow state-ийг эндээс шалгана.</p>
+        <p class="page-sub">Нэвтрэх эрх, database connection болон workflow state-ийг эндээс шалгана.</p>
         <div class="split-panels">
             <div class="card">
                 <h3>Хэрэглэгч</h3>
                 <div class="field-list">
+                    <div class="field"><label>Нэвтрэх эрх</label><input value="${state.authUser?.username ?? user.loginId ?? "-"}" disabled></div>
                     <div class="field"><label>Нэр</label><input value="${user.firstName} ${user.lastName}" disabled></div>
                     <div class="field"><label>Имэйл</label><input value="${user.email}" disabled></div>
                     <div class="field"><label>Тэнхим</label><input value="${user.departmentName}" disabled></div>
@@ -984,4 +961,145 @@ function planEndDate() {
     const date = new Date();
     date.setDate(date.getDate() + 105);
     return date.toLocaleDateString("mn-MN");
+}
+
+function applyAuthenticatedUser(authUser) {
+    state.authUser = authUser;
+    state.activeUserId = authUser.id;
+    state.activeRole = authUser.role.toUpperCase();
+    state.page = "dashboard";
+    state.topicMode = "list";
+    state.researchMode = "list";
+    state.selectedTopicId = null;
+}
+
+function logout() {
+    sessionStorage.removeItem("thesis.authUser");
+    state.dashboard = null;
+    state.workflow = null;
+    state.database = null;
+    state.authUser = null;
+    state.activeRole = null;
+    state.activeUserId = null;
+    appShell.classList.add("hidden");
+    authRoot.classList.remove("hidden");
+    renderAuthScreen("Системээс гарлаа.", false);
+}
+
+function renderAuthScreen(initialMessage = "", isError = false) {
+    authRoot.innerHTML = `
+        <div class="auth-card">
+            <section class="auth-hero">
+                <div>
+                    <div class="logo-mark" style="border-color:white;color:white;">M</div>
+                    <h1>Дипломын ажлыг удирдах систем</h1>
+                    <p>Бүртгэл үүсгэх хэсэггүй. Оюутан, багш, тэнхимийн хэрэглэгчид СИСИ эрхээрээ шууд нэвтэрнэ.</p>
+                </div>
+                <div class="auth-points">
+                    <div><strong>Оюутан</strong><br>СИСИ ID-аараа нэвтэрнэ.</div>
+                    <div><strong>Багш</strong><br>Ажилтны код `tch001` хэлбэрээр нэвтэрнэ.</div>
+                    <div><strong>Тэнхим</strong><br>`sisi-admin` эрхээр нэвтэрнэ.</div>
+                </div>
+            </section>
+            <section class="auth-pane">
+                <div>
+                    <h2>Нэвтрэх</h2>
+                    <p class="auth-sub">СИСИ эрх эсвэл системийн нэвтрэх нэрээ оруулна. Шинэ бүртгэл хийх хэсэг байхгүй.</p>
+                </div>
+                <div id="authMessage" class="message ${initialMessage ? "show" : ""} ${isError ? "error" : "success"}">${escapeHtml(initialMessage)}</div>
+                <form id="loginForm" class="auth-form">
+                    <div>
+                        <label class="auth-label" for="loginUsername">СИСИ ID / нэвтрэх нэр</label>
+                        <input class="auth-input" id="loginUsername" placeholder="22b1num0027 эсвэл tch001" autocomplete="username">
+                    </div>
+                    <div>
+                        <label class="auth-label" for="loginPassword">Нууц үг</label>
+                        <input class="auth-input" id="loginPassword" type="password" placeholder="Нууц үгээ оруулна уу" autocomplete="current-password">
+                    </div>
+                    <div class="auth-actions">
+                        <button class="action-btn" type="submit">Нэвтрэх</button>
+                        <button class="link-btn" type="button" id="forgotToggle">Нууц үг сэргээх</button>
+                    </div>
+                </form>
+                <div id="forgotPanel" class="hidden">
+                    <div class="auth-note">Сэргээх үед түр нууц үгийг системийн default password-р шинэчилнэ.</div>
+                    <form id="forgotForm" class="auth-form" style="margin-top:14px;">
+                        <div>
+                            <label class="auth-label" for="forgotUsername">СИСИ ID / нэвтрэх нэр</label>
+                            <input class="auth-input" id="forgotUsername" placeholder="22b1num0027 эсвэл sisi-admin">
+                        </div>
+                        <div class="auth-actions">
+                            <button class="soft-btn" type="submit">Сэргээх</button>
+                            <button class="link-btn" type="button" id="forgotClose">Хаах</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+    `;
+
+    document.getElementById("loginForm").addEventListener("submit", handleLogin);
+    document.getElementById("forgotToggle").addEventListener("click", () => {
+        document.getElementById("forgotPanel").classList.remove("hidden");
+        document.getElementById("forgotUsername").value = document.getElementById("loginUsername").value;
+    });
+    document.getElementById("forgotClose").addEventListener("click", () => {
+        document.getElementById("forgotPanel").classList.add("hidden");
+    });
+    document.getElementById("forgotForm").addEventListener("submit", handleForgotPassword);
+}
+
+async function handleLogin(event) {
+    event.preventDefault();
+    const username = document.getElementById("loginUsername").value.trim();
+    const password = document.getElementById("loginPassword").value;
+
+    try {
+        const response = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.message || "Нэвтрэх үед алдаа гарлаа.");
+        }
+        sessionStorage.setItem("thesis.authUser", JSON.stringify(payload.user));
+        applyAuthenticatedUser(payload.user);
+        await loadDashboard();
+        showMessage(payload.message || "Амжилттай нэвтэрлээ.", false);
+    } catch (error) {
+        showAuthMessage(error.message || "Нэвтрэх үед алдаа гарлаа.", true);
+    }
+}
+
+async function handleForgotPassword(event) {
+    event.preventDefault();
+    const username = document.getElementById("forgotUsername").value.trim();
+
+    try {
+        const response = await fetch("/api/auth/forgot-password", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.message || "Сэргээх үед алдаа гарлаа.");
+        }
+        showAuthMessage(payload.message, false);
+        document.getElementById("loginUsername").value = payload.username ?? username;
+        document.getElementById("loginPassword").focus();
+    } catch (error) {
+        showAuthMessage(error.message || "Сэргээх үед алдаа гарлаа.", true);
+    }
+}
+
+function showAuthMessage(text, isError) {
+    const authMessage = document.getElementById("authMessage");
+    if (!authMessage) {
+        return;
+    }
+    authMessage.textContent = text;
+    authMessage.className = `message show ${isError ? "error" : "success"}`;
 }

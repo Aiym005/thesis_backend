@@ -8,9 +8,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashSet;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.Set;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class AuthService {
@@ -52,11 +52,38 @@ public class AuthService {
         User user = matchedUser.orElseThrow();
         ApiDtos.AuthUserDto authUser = new ApiDtos.AuthUserDto(
                 user.id(),
-                normalizedUsername,
+                user.loginId(),
                 user.fullName(),
                 toFrontendRole(user.role())
         );
         return new ApiDtos.LoginResponse(true, "Амжилттай нэвтэрлээ.", authUser);
+    }
+
+    public ApiDtos.PasswordResetResponse resetPassword(String username) {
+        String normalizedUsername = normalize(username);
+        if (normalizedUsername.isBlank()) {
+            return new ApiDtos.PasswordResetResponse(false, "СИСИ эрх эсвэл нэвтрэх нэрээ оруулна уу.", null);
+        }
+
+        List<User> users = queryService.getDashboard().users();
+        Optional<User> matchedUser = users.stream()
+                .filter(user -> candidateUsernames(user).contains(normalizedUsername))
+                .findFirst();
+
+        if (matchedUser.isEmpty()) {
+            matchedUser = demoAliasMatch(users, normalizedUsername);
+        }
+
+        if (matchedUser.isEmpty()) {
+            return new ApiDtos.PasswordResetResponse(false, "Ийм хэрэглэгч олдсонгүй.", null);
+        }
+
+        User user = matchedUser.orElseThrow();
+        return new ApiDtos.PasswordResetResponse(
+                true,
+                "Нууц үг амжилттай сэргээгдлээ. Түр нууц үг: " + defaultPassword,
+                user.loginId()
+        );
     }
 
     private Optional<User> demoAliasMatch(List<User> users, String username) {
@@ -84,6 +111,7 @@ public class AuthService {
 
     private Set<String> candidateUsernames(User user) {
         Set<String> usernames = new LinkedHashSet<>();
+        usernames.add(normalize(user.loginId()));
         if (user.email() != null && user.email().contains("@")) {
             usernames.add(normalize(user.email().substring(0, user.email().indexOf('@'))));
         }
@@ -98,6 +126,7 @@ public class AuthService {
             usernames.add(initials(user.departmentName()) + "-dept");
             if (department.contains("software engineering")) {
                 usernames.add("se-dept");
+                usernames.add("sisi-admin");
             }
         }
         return usernames;

@@ -58,7 +58,7 @@ public class ApiResponseMapper {
     }
 
     public ApiDtos.UserDto toUserDto(User user) {
-        return new ApiDtos.UserDto(user.id(), user.role().name(), user.firstName(), user.lastName(), user.email(), user.departmentName(), user.program());
+        return new ApiDtos.UserDto(user.id(), user.role().name(), user.loginId(), user.firstName(), user.lastName(), user.email(), user.departmentName(), user.program());
     }
 
     public ApiDtos.TopicDto toTopicDto(Topic topic) {

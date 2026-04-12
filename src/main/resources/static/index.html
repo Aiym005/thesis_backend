@@ -26,6 +26,129 @@
             background: var(--page);
         }
 
+        .hidden { display: none !important; }
+
+        .auth-shell {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            background:
+                radial-gradient(circle at top left, rgba(47, 87, 184, 0.18), transparent 28%),
+                linear-gradient(135deg, #eef3ff 0%, #f7f8fb 50%, #ffffff 100%);
+        }
+
+        .auth-card {
+            width: min(980px, 100%);
+            display: grid;
+            grid-template-columns: 1.15fr .85fr;
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid #d7e0f6;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 28px 60px rgba(38, 67, 132, 0.14);
+        }
+
+        .auth-hero {
+            padding: 42px 38px;
+            background: linear-gradient(160deg, #2f57b8 0%, #173478 100%);
+            color: white;
+            display: grid;
+            gap: 24px;
+            align-content: space-between;
+        }
+
+        .auth-hero h1 {
+            margin: 0;
+            font-size: 34px;
+            line-height: 1.1;
+        }
+
+        .auth-hero p {
+            margin: 0;
+            color: rgba(255,255,255,.82);
+            line-height: 1.6;
+        }
+
+        .auth-points {
+            display: grid;
+            gap: 12px;
+        }
+
+        .auth-points div {
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: rgba(255,255,255,.1);
+            border: 1px solid rgba(255,255,255,.16);
+        }
+
+        .auth-pane {
+            padding: 38px 34px;
+            display: grid;
+            gap: 18px;
+            align-content: center;
+        }
+
+        .auth-pane h2 {
+            margin: 0;
+            font-size: 26px;
+        }
+
+        .auth-sub {
+            margin: 0;
+            color: #68707b;
+            line-height: 1.55;
+        }
+
+        .auth-form {
+            display: grid;
+            gap: 14px;
+        }
+
+        .auth-label {
+            display: block;
+            font-size: 12px;
+            color: #7c8591;
+            margin-bottom: 6px;
+        }
+
+        .auth-input {
+            width: 100%;
+            border: 1px solid #d7dce6;
+            border-radius: 12px;
+            padding: 13px 14px;
+            font: inherit;
+            background: #fff;
+        }
+
+        .auth-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .link-btn {
+            border: none;
+            background: transparent;
+            color: var(--blue);
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .auth-note {
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: #f5f8ff;
+            color: #49609e;
+            font-size: 13px;
+            line-height: 1.5;
+            border: 1px solid #dce7ff;
+        }
+
         .app-shell {
             display: grid;
             grid-template-columns: 214px 1fr;
@@ -113,8 +236,16 @@
         .logout {
             margin-top: auto;
             padding: 22px 24px;
+        }
+
+        .logout button {
+            border: none;
+            background: transparent;
             color: #ff6f3d;
+            font: inherit;
             font-weight: 600;
+            cursor: pointer;
+            padding: 0;
         }
 
         .main {
@@ -439,17 +570,13 @@
         .message.error { background: #fff1f1; color: #bf3f3f; }
         .message.success { background: #edf9f1; color: #19764a; }
 
-        .profile-controls {
-            display: flex;
-            gap: 8px;
-        }
-
-        .profile-controls select {
-            width: 150px;
-            border: 1px solid #d8dbe1;
-            border-radius: 8px;
-            height: 34px;
-            padding: 0 8px;
+        .profile-login {
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: #edf3ff;
+            color: var(--blue);
+            font-size: 12px;
+            font-weight: 700;
         }
 
         @media (max-width: 1180px) {
@@ -461,11 +588,14 @@
             .sidebar { display: none; }
             .topbar { padding: 12px 16px; height: auto; flex-wrap: wrap; }
             .page { padding: 18px; }
+            .auth-card { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-<div class="app-shell">
+<section id="authRoot" class="auth-shell"></section>
+
+<div id="appShell" class="app-shell hidden">
     <aside class="sidebar">
         <div class="logo-block">
             <div class="logo-mark">M</div>
@@ -481,7 +611,7 @@
             <button data-page="research"><span class="icon"></span>Миний судалгааны ажил</button>
             <button data-page="settings"><span class="icon"></span>Тохиргоо</button>
         </nav>
-        <div class="logout">Гарах</div>
+        <div class="logout"><button id="logoutButton" type="button">Гарах</button></div>
     </aside>
 
     <main class="main">
@@ -490,10 +620,7 @@
             <div class="top-actions">
                 <div class="bubble"></div>
                 <div class="bubble"></div>
-                <div class="profile-controls">
-                    <select id="roleSelect"></select>
-                    <select id="userSelect"></select>
-                </div>
+                <div id="profileLogin" class="profile-login">-</div>
                 <div class="profile">
                     <div class="avatar"></div>
                     <div class="profile-meta">
@@ -511,6 +638,6 @@
     </main>
 </div>
 
-<script src="/app.js?v=20260321-2"></script>
+<script src="/app.js?v=20260412-1"></script>
 </body>
 </html>

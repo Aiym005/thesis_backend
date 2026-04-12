@@ -3,6 +3,7 @@ package com.tms.thesissystem.domain.model;
 public record User(
         Long id,
         UserRole role,
+        String loginId,
         String firstName,
         String lastName,
         String email,
@@ -11,6 +12,7 @@ public record User(
 ) {
     public Long getId() { return id; }
     public UserRole getRole() { return role; }
+    public String getLoginId() { return loginId; }
     public String getFirstName() { return firstName; }
     public String getLastName() { return lastName; }
     public String getEmail() { return email; }

@@ -28,6 +28,19 @@ public class AuthController {
         return response;
     }
 
+    @PostMapping("/forgot-password")
+    @ResponseStatus(HttpStatus.OK)
+    public ApiDtos.PasswordResetResponse forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        ApiDtos.PasswordResetResponse response = authService.resetPassword(request.username());
+        if (!response.ok()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, response.message());
+        }
+        return response;
+    }
+
     public record LoginRequest(String username, String password) {
+    }
+
+    public record ForgotPasswordRequest(String username) {
     }
 }

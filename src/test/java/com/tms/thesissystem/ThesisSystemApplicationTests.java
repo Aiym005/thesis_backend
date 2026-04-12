@@ -68,21 +68,21 @@ class ThesisSystemApplicationTests {
 
     @Test
     void loginWorksWithUsernameAndPassword() {
-        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest("anu", "123456"));
+        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest("22b1num0027", "123456"));
         assertNotNull(response);
         assertEquals(true, response.ok());
         assertNotNull(response.user());
         assertEquals("student", response.user().role());
-        assertEquals("anu", response.user().username());
+        assertEquals("22b1num0027", response.user().username());
     }
 
     @Test
-    void loginWorksWithTemuulenUsername() {
-        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest("Temuulen", "123456"));
+    void loginWorksWithTeacherCode() {
+        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest("tch002", "123456"));
         assertNotNull(response);
         assertTrue(response.ok());
         assertNotNull(response.user());
-        assertEquals("student", response.user().role());
+        assertEquals("teacher", response.user().role());
     }
 
     @Test
@@ -95,11 +95,18 @@ class ThesisSystemApplicationTests {
     }
 
     @Test
-    void seededUsersContainThreeUsersPerRole() {
+    void seededUsersContainExpectedMinimumUsersPerRole() {
         ApiDtos.DashboardResponse snapshot = workflowController.dashboard();
-        assertEquals(3, snapshot.users().stream().filter(user -> "STUDENT".equals(user.role())).count());
-        assertEquals(3, snapshot.users().stream().filter(user -> "TEACHER".equals(user.role())).count());
+        assertEquals(100, snapshot.users().stream().filter(user -> "STUDENT".equals(user.role())).count());
+        assertEquals(20, snapshot.users().stream().filter(user -> "TEACHER".equals(user.role())).count());
         assertEquals(1, snapshot.users().stream().filter(user -> "DEPARTMENT".equals(user.role())).count());
+    }
+
+    @Test
+    void forgotPasswordReturnsTemporaryPasswordForKnownUser() {
+        ApiDtos.PasswordResetResponse response = authController.forgotPassword(new AuthController.ForgotPasswordRequest("22b1num0027"));
+        assertTrue(response.ok());
+        assertEquals("22b1num0027", response.username());
     }
 
     @Test

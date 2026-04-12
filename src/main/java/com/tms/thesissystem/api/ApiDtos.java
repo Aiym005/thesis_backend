@@ -19,7 +19,7 @@ public final class ApiDtos {
 
     public record SummaryDto(long pendingTopics, long pendingPlans, long totalReviews) { }
 
-    public record UserDto(Long id, String role, String firstName, String lastName, String email, String departmentName, String program) { }
+    public record UserDto(Long id, String role, String loginId, String firstName, String lastName, String email, String departmentName, String program) { }
 
     public record TopicDto(
             Long id,
@@ -89,4 +89,6 @@ public final class ApiDtos {
     public record AuthUserDto(Long id, String username, String displayName, String role) { }
 
     public record LoginResponse(boolean ok, String message, AuthUserDto user) { }
+
+    public record PasswordResetResponse(boolean ok, String message, String username) { }
 }
