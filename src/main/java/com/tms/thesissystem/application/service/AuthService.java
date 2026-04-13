@@ -112,8 +112,11 @@ public class AuthService {
     private Set<String> candidateUsernames(User user) {
         Set<String> usernames = new LinkedHashSet<>();
         usernames.add(normalize(user.loginId()));
-        if (user.email() != null && user.email().contains("@")) {
-            usernames.add(normalize(user.email().substring(0, user.email().indexOf('@'))));
+        if (user.email() != null && !user.email().isBlank()) {
+            usernames.add(normalize(user.email()));
+            if (user.email().contains("@")) {
+                usernames.add(normalize(user.email().substring(0, user.email().indexOf('@'))));
+            }
         }
         usernames.add(normalize(user.firstName()));
         usernames.add(normalize(user.fullName()));
@@ -126,7 +129,6 @@ public class AuthService {
             usernames.add(initials(user.departmentName()) + "-dept");
             if (department.contains("software engineering")) {
                 usernames.add("se-dept");
-                usernames.add("sisi-admin");
             }
         }
         return usernames;

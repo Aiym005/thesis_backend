@@ -72,6 +72,7 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
         this.username = username;
         this.password = password;
         ensureProjectionTables();
+        ensureIdentityColumns();
         seedIfEmpty();
         syncNotificationSequence();
         reconcileApprovedTopicsPerStudent();
@@ -91,6 +92,16 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
                     """);
         } catch (Exception exception) {
             throw new IllegalStateException("Failed to initialize projection tables", exception);
+        }
+    }
+
+    private void ensureIdentityColumns() {
+        try (Connection connection = getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("alter table department add column if not exists admin text");
+            statement.execute("update department set admin = 'sisi-admin' where admin is null or trim(admin) = ''");
+        } catch (Exception exception) {
+            throw new IllegalStateException("Failed to initialize identity columns", exception);
         }
     }
 
@@ -351,12 +362,12 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
                 }
             }
             try (Statement statement = connection.createStatement();
-                 ResultSet rs = statement.executeQuery("select id, name from department order by id limit 1")) {
+                 ResultSet rs = statement.executeQuery("select id, name, admin from department order by id limit 1")) {
                 while (rs.next()) {
                     users.add(new User(
                             encodeUserId(UserRole.DEPARTMENT, rs.getLong(1)),
                             UserRole.DEPARTMENT,
-                            "sisi-admin",
+                            rs.getString(3),
                             rs.getString(2),
                             "Department",
                             "sisi.admin@tms.mn",
@@ -775,9 +786,10 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
     }
 
     private long insertDepartment(Connection connection, String name) throws Exception {
-        try (PreparedStatement ps = connection.prepareStatement("insert into department(name, programs) values (?, ?::json)", Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement ps = connection.prepareStatement("insert into department(name, programs, admin) values (?, ?::json, ?)", Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, name);
             ps.setString(2, "[\"B.SE\"]");
+            ps.setString(3, "sisi-admin");
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 rs.next();

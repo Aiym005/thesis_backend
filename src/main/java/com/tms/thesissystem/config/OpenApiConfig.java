@@ -15,12 +15,12 @@ public class OpenApiConfig {
     public OpenAPI thesisSystemOpenApi() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Thesis System API")
-                        .description("Thesis workflow, authentication, and verification endpoints")
+                        .title("Дипломын ажлын системийн API")
+                        .description("Нэвтрэлт, сэдэв, төлөвлөгөө, баталгаажуулалтын endpoint-ууд")
                         .version("v1")
                         .contact(new Contact()
-                                .name("TMS Thesis System")
+                                .name("TMS Дипломын ажлын систем")
                                 .email("support@tms.mn")))
-                .servers(List.of(new Server().url("http://localhost:8080").description("Local server")));
+                .servers(List.of(new Server().url("http://localhost:8080").description("Локал сервер")));
     }
 }
