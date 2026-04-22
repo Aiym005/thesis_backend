@@ -71,11 +71,104 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
         this.url = url;
         this.username = username;
         this.password = password;
+        ensureCoreTables();
         ensureProjectionTables();
         ensureIdentityColumns();
         seedIfEmpty();
         syncNotificationSequence();
         reconcileApprovedTopicsPerStudent();
+    }
+
+    private void ensureCoreTables() {
+        try (Connection connection = getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute("""
+                    create table if not exists department (
+                        id bigserial primary key,
+                        name text not null,
+                        programs jsonb,
+                        admin text
+                    )
+                    """);
+            statement.execute("""
+                    create table if not exists student (
+                        id bigserial primary key,
+                        dep_id bigint references department(id),
+                        firstname text not null,
+                        lastname text not null,
+                        mail text,
+                        program text,
+                        sisi_id text,
+                        is_choosed boolean default false,
+                        proposed_number integer default 0
+                    )
+                    """);
+            statement.execute("""
+                    create table if not exists teacher (
+                        id bigserial primary key,
+                        dep_id bigint references department(id),
+                        firstname text not null,
+                        lastname text not null,
+                        mail text,
+                        num_of_choosed_stud integer default 0
+                    )
+                    """);
+            statement.execute("""
+                    create table if not exists topic (
+                        id bigserial primary key,
+                        created_at date not null,
+                        created_by_id bigint not null,
+                        created_by_type text not null,
+                        fields jsonb not null,
+                        form_id bigint,
+                        program text,
+                        status text not null
+                    )
+                    """);
+            statement.execute("""
+                    create table if not exists topic_request (
+                        id bigserial primary key,
+                        is_selected boolean default false,
+                        req_note text,
+                        req_text text,
+                        requested_by_id bigint not null,
+                        requested_by_type text not null,
+                        selected_at date,
+                        topic_id bigint not null references topic(id)
+                    )
+                    """);
+            statement.execute("""
+                    create table if not exists plan (
+                        id bigserial primary key,
+                        created_at date not null,
+                        status text not null,
+                        student_id bigint not null,
+                        topic_id bigint not null references topic(id)
+                    )
+                    """);
+            statement.execute("""
+                    create table if not exists plan_week (
+                        id bigserial primary key,
+                        plan_id bigint not null references plan(id) on delete cascade,
+                        result jsonb,
+                        task text not null,
+                        week_number integer not null
+                    )
+                    """);
+            statement.execute("""
+                    create table if not exists plan_response (
+                        id bigserial primary key,
+                        approver_id bigint not null,
+                        approver_type text not null,
+                        note text,
+                        plan_id bigint not null references plan(id) on delete cascade,
+                        res text not null,
+                        res_date date
+                    )
+                    """);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Failed to initialize core tables", exception);
+        }
     }
 
     private void ensureProjectionTables() {
@@ -925,7 +1018,7 @@ public class InMemoryWorkflowRepository implements WorkflowRepository {
     }
 
     private void insertPlanWeek(Connection connection, Long planId, int week, String task, String result) throws Exception {
-        try (PreparedStatement ps = connection.prepareStatement("insert into plan_week(plan_id, result, task, week_number) values (?, ?, ?, ?)")) {
+        try (PreparedStatement ps = connection.prepareStatement("insert into plan_week(plan_id, result, task, week_number) values (?, ?::jsonb, ?, ?)")) {
             ps.setLong(1, planId);
             ps.setString(2, result);
             ps.setString(3, task);

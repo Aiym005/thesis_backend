@@ -1,0 +1,151 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: thesis-postgres
+    environment:
+      POSTGRES_DB: thesisdb
+      POSTGRES_USER: aiymserjan
+      POSTGRES_PASSWORD: Aiym0404
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiymserjan -d thesisdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: thesis-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      MAIN_CLASS: com.tms.thesissystem.microservices.user.UserServiceApplication
+      APP_DATABASE_HOST: postgres
+      APP_DATABASE_PORT: 5432
+      APP_DATABASE_NAME: thesisdb
+      APP_DATABASE_USERNAME: aiymserjan
+      APP_DATABASE_PASSWORD: Aiym0404
+      APP_DATABASE_URL: jdbc:postgresql://postgres:5432/thesisdb
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+
+  workflow-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      MAIN_CLASS: com.tms.thesissystem.microservices.workflow.WorkflowServiceApplication
+      APP_DATABASE_HOST: postgres
+      APP_DATABASE_PORT: 5432
+      APP_DATABASE_NAME: thesisdb
+      APP_DATABASE_USERNAME: aiymserjan
+      APP_DATABASE_PASSWORD: Aiym0404
+      APP_DATABASE_URL: jdbc:postgresql://postgres:5432/thesisdb
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      APP_MESSAGING_RABBIT_ENABLED: "true"
+      APP_MESSAGING_RABBIT_EXCHANGE: thesis.workflow.exchange
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8082:8082"
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      MAIN_CLASS: com.tms.thesissystem.microservices.notification.NotificationServiceApplication
+      APP_DATABASE_HOST: postgres
+      APP_DATABASE_PORT: 5432
+      APP_DATABASE_NAME: thesisdb
+      APP_DATABASE_USERNAME: aiymserjan
+      APP_DATABASE_PASSWORD: Aiym0404
+      APP_DATABASE_URL: jdbc:postgresql://postgres:5432/thesisdb
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      APP_MESSAGING_RABBIT_ENABLED: "true"
+      APP_MESSAGING_RABBIT_EXCHANGE: thesis.workflow.exchange
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      MAIN_CLASS: com.tms.thesissystem.microservices.audit.AuditServiceApplication
+      APP_DATABASE_HOST: postgres
+      APP_DATABASE_PORT: 5432
+      APP_DATABASE_NAME: thesisdb
+      APP_DATABASE_USERNAME: aiymserjan
+      APP_DATABASE_PASSWORD: Aiym0404
+      APP_DATABASE_URL: jdbc:postgresql://postgres:5432/thesisdb
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      APP_MESSAGING_RABBIT_ENABLED: "true"
+      APP_MESSAGING_RABBIT_EXCHANGE: thesis.workflow.exchange
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8084:8084"
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      MAIN_CLASS: com.tms.thesissystem.microservices.gateway.ApiGatewayApplication
+      APP_SERVICES_USER_BASE_URL: http://user-service:8081
+      APP_SERVICES_WORKFLOW_BASE_URL: http://workflow-service:8082
+      APP_SERVICES_NOTIFICATION_BASE_URL: http://notification-service:8083
+      APP_SERVICES_AUDIT_BASE_URL: http://audit-service:8084
+    depends_on:
+      user-service:
+        condition: service_started
+      workflow-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      audit-service:
+        condition: service_started
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres-data:

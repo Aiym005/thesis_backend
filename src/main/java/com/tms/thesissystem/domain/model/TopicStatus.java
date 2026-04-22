@@ -6,5 +6,6 @@ public enum TopicStatus {
     PENDING_DEPARTMENT_APPROVAL,
     APPROVED,
     SUPERSEDED,
-    REJECTED
+    REJECTED,
+    DELETED
 }

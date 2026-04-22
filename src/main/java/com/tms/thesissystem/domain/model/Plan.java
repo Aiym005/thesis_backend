@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Plan {
+    public static final int REQUIRED_WEEKS = 15;
+
     private final Long id;
     private final Long topicId;
     private final String topicTitle;
@@ -36,13 +38,27 @@ public class Plan {
         }
         tasks.clear();
         tasks.addAll(updatedTasks);
+        if (status == PlanStatus.REJECTED) {
+            approvals.clear();
+        }
         status = PlanStatus.DRAFT;
         updatedAt = now;
     }
 
     public void submit(LocalDateTime now) {
-        if (tasks.size() != 15) {
+        if (tasks.size() == REQUIRED_WEEKS - 1) {
+            tasks.add(new WeeklyTask(
+                    REQUIRED_WEEKS,
+                    "7 хоног " + REQUIRED_WEEKS + " - milestone",
+                    "Deliverable " + REQUIRED_WEEKS,
+                    "Тайлан дүгнэлт, эцсийн сайжруулалт"
+            ));
+        }
+        if (tasks.size() != REQUIRED_WEEKS) {
             throw new IllegalStateException("Төлөвлөгөө 15 долоо хоногийн даалгавартай байх ёстой.");
+        }
+        if (status == PlanStatus.REJECTED) {
+            approvals.clear();
         }
         status = PlanStatus.PENDING_TEACHER_APPROVAL;
         updatedAt = now;

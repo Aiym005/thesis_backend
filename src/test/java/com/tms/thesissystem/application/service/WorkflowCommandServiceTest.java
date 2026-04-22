@@ -92,7 +92,7 @@ class WorkflowCommandServiceTest {
     void savePlanUsesLatestApprovedTopicWhenRequestedTopicMissing() {
         Topic approvedTopic = new Topic(22L, "Approved Topic", "Desc", "SE", STUDENT_ID, student.fullName(), UserRole.STUDENT,
                 STUDENT_ID, student.fullName(), TEACHER_ID, teacher.fullName(), TopicStatus.APPROVED, now().minusDays(1), now(), List.of());
-        List<WeeklyTask> tasks = weeklyTasks(3);
+        List<WeeklyTask> tasks = weeklyTasks(15);
 
         when(repository.findTopicById(999L)).thenReturn(Optional.empty());
         when(repository.findAllTopics()).thenReturn(List.of(approvedTopic));
@@ -107,6 +107,42 @@ class WorkflowCommandServiceTest {
         WorkflowEvent event = capturedEvent();
         assertThat(event.action()).isEqualTo("PLAN_SAVED");
         assertThat(event.recipientIds()).containsExactly(STUDENT_ID);
+    }
+
+    @Test
+    void updateRejectedTopicResetsStatusAndClearsPreviousApprovals() {
+        Topic rejectedTopic = new Topic(12L, "Rejected Topic", "Desc", "SE", STUDENT_ID, student.fullName(), UserRole.STUDENT,
+                STUDENT_ID, student.fullName(), null, null, TopicStatus.REJECTED, now(), now(),
+                List.of(new ApprovalRecord(ApprovalStage.TEACHER, TEACHER_ID, teacher.fullName(), false, "revise", now())));
+
+        when(repository.findTopicById(12L)).thenReturn(Optional.of(rejectedTopic));
+        when(repository.findAllTopics()).thenReturn(List.of(rejectedTopic));
+        when(repository.findUsersByRole(UserRole.TEACHER)).thenReturn(List.of(teacher));
+
+        Topic updated = service.updateStudentTopic(12L, 1L, "Retried Topic", "Updated", "SE");
+
+        assertThat(updated.status()).isEqualTo(TopicStatus.PENDING_TEACHER_APPROVAL);
+        assertThat(updated.approvals()).isEmpty();
+    }
+
+    @Test
+    void submitRejectedPlanClearsPreviousApprovalsBeforeResubmission() {
+        Plan rejectedPlan = new Plan(31L, 41L, "Approved Topic", STUDENT_ID, student.fullName(), PlanStatus.REJECTED,
+                weeklyTasks(15),
+                List.of(new ApprovalRecord(ApprovalStage.TEACHER, TEACHER_ID, teacher.fullName(), false, "fix it", now())),
+                now(), now());
+        Topic topic = new Topic(41L, "Approved Topic", "Desc", "SE", STUDENT_ID, student.fullName(), UserRole.STUDENT,
+                STUDENT_ID, student.fullName(), TEACHER_ID, teacher.fullName(), TopicStatus.APPROVED, now(), now(), List.of());
+
+        when(repository.findPlanById(31L)).thenReturn(Optional.of(rejectedPlan));
+        when(repository.findTopicById(41L)).thenReturn(Optional.of(topic));
+        when(repository.findUsersByRole(UserRole.STUDENT)).thenReturn(List.of(student));
+        when(repository.findUsersByRole(UserRole.TEACHER)).thenReturn(List.of(teacher));
+
+        Plan submitted = service.submitPlan(31L, 1L);
+
+        assertThat(submitted.status()).isEqualTo(PlanStatus.PENDING_TEACHER_APPROVAL);
+        assertThat(submitted.approvals()).isEmpty();
     }
 
     @Test

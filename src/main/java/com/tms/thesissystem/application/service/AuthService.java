@@ -1,62 +1,91 @@
 package com.tms.thesissystem.application.service;
 
 import com.tms.thesissystem.api.ApiDtos;
-import com.tms.thesissystem.domain.model.User;
-import com.tms.thesissystem.domain.model.UserRole;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.LinkedHashSet;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Locale;
-import java.util.Set;
-import java.util.List;
 import java.util.Optional;
+import java.util.HexFormat;
+import java.security.SecureRandom;
+import java.util.regex.Pattern;
 
 @Service
 public class AuthService {
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9._@-]{3,64}$");
     private final WorkflowQueryService queryService;
-    private final String defaultPassword;
+    private final AuthAccountStore authAccountStore;
+    private final SecureRandom secureRandom = new SecureRandom();
 
-    public AuthService(WorkflowQueryService queryService,
-                       @Value("${app.auth.default-password:123456}") String defaultPassword) {
+    public AuthService(WorkflowQueryService queryService, AuthAccountStore authAccountStore) {
         this.queryService = queryService;
-        this.defaultPassword = defaultPassword;
+        this.authAccountStore = authAccountStore;
     }
 
     public ApiDtos.LoginResponse login(String username, String password) {
         String normalizedUsername = normalize(username);
-        String normalizedPassword = password == null ? "" : password;
+        String normalizedPassword = password == null ? "" : password.trim();
 
         if (normalizedUsername.isBlank() || normalizedPassword.isBlank()) {
             return new ApiDtos.LoginResponse(false, "Нэвтрэх нэр болон нууц үгээ оруулна уу.", null);
         }
+        if (!isSafeUsername(normalizedUsername)) {
+            return new ApiDtos.LoginResponse(false, "Нэвтрэх нэрийн формат буруу байна.", null);
+        }
 
-        if (!defaultPassword.equals(normalizedPassword)) {
+        Optional<AuthAccountStore.AuthAccount> account = authAccountStore.findByUsername(normalizedUsername);
+        if (account.isEmpty()) {
             return new ApiDtos.LoginResponse(false, "Нэвтрэх нэр эсвэл нууц үг буруу байна.", null);
         }
-
-        List<User> users = queryService.getDashboard().users();
-
-        Optional<User> matchedUser = users.stream()
-                .filter(user -> candidateUsernames(user).contains(normalizedUsername))
-                .findFirst();
-
-        if (matchedUser.isEmpty()) {
-            matchedUser = demoAliasMatch(users, normalizedUsername);
-        }
-
-        if (matchedUser.isEmpty()) {
+        if (!account.get().passwordHash().equals(hashPassword(normalizedPassword))) {
             return new ApiDtos.LoginResponse(false, "Нэвтрэх нэр эсвэл нууц үг буруу байна.", null);
         }
-
-        User user = matchedUser.orElseThrow();
+        String role = normalizeStoredRole(account.get().role(), normalizedUsername);
         ApiDtos.AuthUserDto authUser = new ApiDtos.AuthUserDto(
-                user.id(),
-                user.loginId(),
-                user.fullName(),
-                toFrontendRole(user.role())
+                account.get().userId(),
+                account.get().username(),
+                account.get().displayName() == null || account.get().displayName().isBlank()
+                        ? account.get().username()
+                        : account.get().displayName(),
+                role
         );
         return new ApiDtos.LoginResponse(true, "Амжилттай нэвтэрлээ.", authUser);
+    }
+
+    public ApiDtos.RegistrationResponse register(String username, String password, String confirmPassword) {
+        String normalizedUsername = normalize(username);
+        String normalizedPassword = password == null ? "" : password.trim();
+        String normalizedConfirm = confirmPassword == null ? "" : confirmPassword.trim();
+
+        if (normalizedUsername.isBlank() || normalizedPassword.isBlank() || normalizedConfirm.isBlank()) {
+            return new ApiDtos.RegistrationResponse(false, "Нэвтрэх нэр, нууц үг, давтан нууц үгээ бүрэн оруулна уу.", null);
+        }
+        if (!isSafeUsername(normalizedUsername)) {
+            return new ApiDtos.RegistrationResponse(false, "Нэвтрэх нэр зөвхөн үсэг, тоо, цэг, зураас, @, underscore агуулна.", null);
+        }
+        if (normalizedPassword.length() < 6) {
+            return new ApiDtos.RegistrationResponse(false, "Нууц үг хамгийн багадаа 6 тэмдэгт байна.", null);
+        }
+        if (normalizedPassword.length() > 128) {
+            return new ApiDtos.RegistrationResponse(false, "Нууц үг хэт урт байна.", null);
+        }
+        if (!normalizedPassword.equals(normalizedConfirm)) {
+            return new ApiDtos.RegistrationResponse(false, "Нууц үг таарахгүй байна.", null);
+        }
+        if (authAccountStore.findByUsername(normalizedUsername).isPresent()) {
+            return new ApiDtos.RegistrationResponse(false, "Энэ хэрэглэгч аль хэдийн бүртгүүлсэн байна.", normalizedUsername);
+        }
+
+        Long userId = authAccountStore.nextUserId();
+        authAccountStore.save(
+                userId,
+                normalizedUsername,
+                hashPassword(normalizedPassword),
+                inferRole(normalizedUsername),
+                normalizedUsername
+        );
+        return new ApiDtos.RegistrationResponse(true, "Бүртгэл амжилттай үүслээ. Одоо нэвтэрнэ үү.", normalizedUsername);
     }
 
     public ApiDtos.PasswordResetResponse resetPassword(String username) {
@@ -64,94 +93,67 @@ public class AuthService {
         if (normalizedUsername.isBlank()) {
             return new ApiDtos.PasswordResetResponse(false, "СИСИ эрх эсвэл нэвтрэх нэрээ оруулна уу.", null);
         }
-
-        List<User> users = queryService.getDashboard().users();
-        Optional<User> matchedUser = users.stream()
-                .filter(user -> candidateUsernames(user).contains(normalizedUsername))
-                .findFirst();
-
-        if (matchedUser.isEmpty()) {
-            matchedUser = demoAliasMatch(users, normalizedUsername);
+        if (!isSafeUsername(normalizedUsername)) {
+            return new ApiDtos.PasswordResetResponse(false, "Нэвтрэх нэрийн формат буруу байна.", null);
         }
-
-        if (matchedUser.isEmpty()) {
+        Optional<AuthAccountStore.AuthAccount> account = authAccountStore.findByUsername(normalizedUsername);
+        if (account.isEmpty()) {
             return new ApiDtos.PasswordResetResponse(false, "Ийм хэрэглэгч олдсонгүй.", null);
         }
-
-        User user = matchedUser.orElseThrow();
+        String temporaryPassword = generateTemporaryPassword();
+        authAccountStore.save(
+                account.get().userId(),
+                account.get().username(),
+                hashPassword(temporaryPassword),
+                normalizeStoredRole(account.get().role(), account.get().username()),
+                account.get().displayName()
+        );
         return new ApiDtos.PasswordResetResponse(
                 true,
-                "Нууц үг амжилттай сэргээгдлээ. Түр нууц үг: " + defaultPassword,
-                user.loginId()
+                "Нууц үг амжилттай сэргээгдлээ. Түр нууц үг: " + temporaryPassword,
+                account.get().username()
         );
     }
 
-    private Optional<User> demoAliasMatch(List<User> users, String username) {
-        List<String> studentAliases = List.of("anu", "temuulen", "nomin");
-        List<String> teacherAliases = List.of("enkh", "bolor", "saruul");
-        List<String> departmentAliases = List.of("se-dept");
-
-        int studentIndex = studentAliases.indexOf(username);
-        if (studentIndex >= 0) {
-            return users.stream().filter(user -> user.role() == UserRole.STUDENT).skip(studentIndex).findFirst();
+    private String hashPassword(String password) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashed = digest.digest(password.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hashed);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Нууц үг боловсруулахад алдаа гарлаа.", exception);
         }
-
-        int teacherIndex = teacherAliases.indexOf(username);
-        if (teacherIndex >= 0) {
-            return users.stream().filter(user -> user.role() == UserRole.TEACHER).skip(teacherIndex).findFirst();
-        }
-
-        int departmentIndex = departmentAliases.indexOf(username);
-        if (departmentIndex >= 0) {
-            return users.stream().filter(user -> user.role() == UserRole.DEPARTMENT).skip(departmentIndex).findFirst();
-        }
-
-        return Optional.empty();
     }
 
-    private Set<String> candidateUsernames(User user) {
-        Set<String> usernames = new LinkedHashSet<>();
-        usernames.add(normalize(user.loginId()));
-        if (user.email() != null && !user.email().isBlank()) {
-            usernames.add(normalize(user.email()));
-            if (user.email().contains("@")) {
-                usernames.add(normalize(user.email().substring(0, user.email().indexOf('@'))));
-            }
-        }
-        usernames.add(normalize(user.firstName()));
-        usernames.add(normalize(user.fullName()));
-        if (user.fullName() != null && !user.fullName().isBlank()) {
-            usernames.add(normalize(user.fullName().split("\\s+")[0]));
-        }
-        if (user.role() == UserRole.DEPARTMENT) {
-            String department = normalize(user.departmentName());
-            usernames.add(department.replace(" ", "-") + "-dept");
-            usernames.add(initials(user.departmentName()) + "-dept");
-            if (department.contains("software engineering")) {
-                usernames.add("se-dept");
-            }
-        }
-        return usernames;
-    }
-
-    private String initials(String value) {
-        if (value == null || value.isBlank()) {
-            return "dept";
-        }
-        StringBuilder builder = new StringBuilder();
-        for (String part : value.trim().split("\\s+")) {
-            if (!part.isBlank()) {
-                builder.append(Character.toLowerCase(part.charAt(0)));
-            }
-        }
-        return builder.toString();
-    }
-
-    private String toFrontendRole(UserRole role) {
-        return role.name().toLowerCase(Locale.ROOT);
+    private String generateTemporaryPassword() {
+        byte[] bytes = new byte[4];
+        secureRandom.nextBytes(bytes);
+        return "tmp-" + HexFormat.of().formatHex(bytes);
     }
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isSafeUsername(String username) {
+        return USERNAME_PATTERN.matcher(username).matches();
+    }
+
+    private String inferRole(String normalizedUsername) {
+        if (normalizedUsername.startsWith("tch")) {
+            return "teacher";
+        }
+        if (normalizedUsername.contains("admin") || normalizedUsername.contains("dept")) {
+            return "department";
+        }
+        return "student";
+    }
+
+    private String normalizeStoredRole(String storedRole, String username) {
+        String normalizedRole = normalize(storedRole);
+        if (normalizedRole.equals("teacher") || normalizedRole.equals("department") || normalizedRole.equals("student")) {
+            return normalizedRole;
+        }
+        return inferRole(username);
     }
 }

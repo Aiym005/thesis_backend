@@ -1,0 +1,7 @@
+.git
+.idea
+target
+.m2repo
+docs
+*.iml
+.DS_Store

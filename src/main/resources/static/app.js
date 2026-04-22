@@ -13,6 +13,8 @@ const state = {
     lastPlanId: null
 };
 
+const PLAN_WEEKS = 15;
+
 const roleLabels = {
     STUDENT: "Оюутан",
     TEACHER: "Багш",
@@ -53,13 +55,22 @@ function boot() {
 }
 
 async function loadDashboard() {
-    const [dashboardResponse, workflowResponse, databaseResponse] = await Promise.all([
+    const [dashboardResponse, workflowResponse, databaseResponse, notificationsResponse] = await Promise.all([
         fetch("/api/dashboard"),
         fetch("/api/verification/state"),
-        fetch("/api/system/database").catch(() => null)
+        fetch("/api/system/database").catch(() => null),
+        fetch("/api/notifications").catch(() => null)
     ]);
 
-    state.dashboard = await dashboardResponse.json();
+    const dashboard = await dashboardResponse.json();
+    const notifications = notificationsResponse && notificationsResponse.ok
+        ? await notificationsResponse.json()
+        : dashboard.notifications ?? [];
+
+    state.dashboard = {
+        ...dashboard,
+        notifications
+    };
     state.workflow = await workflowResponse.json();
     state.database = databaseResponse ? await databaseResponse.json() : null;
     state.activeUserId = state.authUser?.id ?? state.activeUserId;
@@ -96,7 +107,7 @@ function renderDashboard(user) {
     if (state.activeRole === "STUDENT") {
         const approved = getApprovedTopic(user);
         const pendingRequests = state.dashboard.topics.filter(topic =>
-            topic.ownerStudentId === user.id && topic.status !== "APPROVED" && topic.status !== "REJECTED"
+            topic.ownerStudentId === user.id && !["APPROVED", "REJECTED", "SUPERSEDED"].includes(topic.status)
         );
         const rejectedRequests = state.dashboard.topics.filter(topic =>
             topic.ownerStudentId === user.id && topic.status === "REJECTED"
@@ -147,6 +158,8 @@ function renderDashboard(user) {
             topic.proposerId === user.id && topic.ownerStudentId == null && topic.status === "PENDING_DEPARTMENT_APPROVAL"
         );
         const myCatalogOpen = state.workflow.topics.availableTopics.filter(topic => topic.proposerId === user.id);
+        const supervisedStudents = getTeacherSupervisedStudents(user.id);
+        const teacherLoad = pendingTopics.length + pendingPlans.length + supervisedStudents.length;
 
         return `
             <h1>Багшийн самбар</h1>
@@ -155,7 +168,9 @@ function renderDashboard(user) {
                 ["Хүлээгдэж буй сэдэв", String(pendingTopics.length)],
                 ["Тэнхимд хүлээгдэж буй миний сэдэв", String(myCatalogPending.length)],
                 ["Нээлттэй болсон миний сэдэв", String(myCatalogOpen.length)],
-                ["Хүлээгдэж буй төлөвлөгөө", String(pendingPlans.length)]
+                ["Хүлээгдэж буй төлөвлөгөө", String(pendingPlans.length)],
+                ["Удирдаж буй оюутан", String(supervisedStudents.length)],
+                ["Нийт ачаалал", String(teacherLoad)]
             ])}
             <div class="split-panels">
                 <div class="card">
@@ -238,7 +253,7 @@ function renderTopicsPage(user) {
 function renderStudentTopicList(user) {
     const topics = filterSearch(state.workflow.topics.availableTopics);
     const myPending = state.dashboard.topics.filter(topic =>
-        topic.ownerStudentId === user.id && topic.status !== "APPROVED" && topic.status !== "REJECTED"
+        topic.ownerStudentId === user.id && !["APPROVED", "SUPERSEDED"].includes(topic.status)
     );
     return `
         <h1>Сэдэв сонголт</h1>
@@ -304,6 +319,7 @@ function renderStudentTopicRequest(user) {
     const topic = getSelectedTopic();
     if (!topic) return renderStudentTopicList(user);
     const selectable = topic.status === "AVAILABLE";
+    const editable = topic.proposerId === user.id && topic.proposerRole === "STUDENT" && !["APPROVED", "SUPERSEDED"].includes(topic.status);
     return `
         <h1>Сэдвийн хүсэлт</h1>
         <p class="page-sub">Шинэ хүсэлт үүсгэх эсвэл өмнөх хүсэлтийн төлөвийг харах хэсэг.</p>
@@ -311,18 +327,20 @@ function renderStudentTopicRequest(user) {
             <div class="form-grid">
                 <div class="field-list">
                     ${renderStudentIdentityFields(user)}
-                    <div class="field"><label>Сэдэв</label><input value="${escapeHtml(safeTopicTitle(topic))}" disabled></div>
+                    <div class="field"><label>Сэдэв</label><input id="student-topic-title" value="${escapeHtml(safeTopicTitle(topic))}" ${editable ? "" : "disabled"}></div>
+                    <div class="field"><label>Хөтөлбөр</label><input id="student-topic-program" value="${escapeHtml(topic.program ?? user.program ?? "B.SE")}" ${editable ? "" : "disabled"}></div>
                     <div class="field"><label>Төлөв</label><input value="${renderStatus(topic.status)}" disabled></div>
                 </div>
                 <div class="essay-list">
-                    <div class="essay"><label>Тайлбар</label><textarea id="motivationInput">${escapeHtml(safeText(topic.description, "Тайлбар оруулаагүй."))}</textarea></div>
+                    <div class="essay"><label>Тайлбар</label><textarea id="student-topic-description" ${editable ? "" : "disabled"}>${escapeHtml(safeText(topic.description, "Тайлбар оруулаагүй."))}</textarea></div>
                     <div class="essay"><label>Сонирхол / үндэслэл</label><textarea id="projectsInput">Event-driven, layered architecture дээр ажиллах сонирхолтой.</textarea></div>
                     <div class="essay"><label>Ур чадвар</label><textarea id="skillsInput">Java, Spring Boot, JavaScript, PostgreSQL</textarea></div>
                 </div>
             </div>
             <div class="footer-actions">
                 <button class="outline-btn" onclick="backToTopicList()">Буцах</button>
-                ${selectable ? `<button class="action-btn" onclick="claimTopic(${topic.id})">Сонгох хүсэлт илгээх</button>` : `<button class="soft-btn" onclick="backToTopicList()">Хүсэлтийн жагсаалт руу буцах</button>`}
+                ${selectable ? `<button class="action-btn" onclick="claimTopic(${topic.id})">Сонгох хүсэлт илгээх</button>` : ""}
+                ${editable ? `<button class="soft-btn" onclick="updateStudentTopic(${topic.id})">Засах</button><button class="outline-btn" onclick="deleteTopic(${topic.id}, 'STUDENT')">Устгах</button>` : `<button class="soft-btn" onclick="backToTopicList()">Хүсэлтийн жагсаалт руу буцах</button>`}
             </div>
         </div>
     `;
@@ -334,6 +352,10 @@ function renderTeacherTopics(user) {
         topic.proposerId === user.id && topic.ownerStudentId == null && topic.status === "PENDING_DEPARTMENT_APPROVAL"
     );
     const myOpenCatalog = state.workflow.topics.availableTopics.filter(topic => topic.proposerId === user.id);
+    const editableCatalog = state.dashboard.topics.filter(topic =>
+        topic.proposerId === user.id && topic.proposerRole === "TEACHER" && topic.ownerStudentId == null && !["DELETED", "SUPERSEDED"].includes(topic.status)
+    );
+    const supervisedStudents = getTeacherSupervisedStudents(user.id);
 
     return `
         <h1>Сэдэв баталгаажуулалт</h1>
@@ -341,7 +363,9 @@ function renderTeacherTopics(user) {
         ${renderMetricCards([
             ["Оюутнаас ирсэн сэдэв", String(pendingTopics.length)],
             ["Тэнхим хүлээж буй миний сэдэв", String(myPendingCatalog.length)],
-            ["Нээлттэй болсон миний сэдэв", String(myOpenCatalog.length)]
+            ["Нээлттэй болсон миний сэдэв", String(myOpenCatalog.length)],
+            ["Удирдаж буй оюутан", String(supervisedStudents.length)],
+            ["Ачаалал", String(supervisedStudents.length + pendingTopics.length)]
         ])}
         <div class="card">
             <h3>Шинэ сэдэв дэвшүүлэх</h3>
@@ -379,6 +403,24 @@ function renderTeacherTopics(user) {
                 </tbody>
             </table>
         </div>
+        <div class="card">
+            <h3>Өөрийн сэдвүүдээ засах, устгах</h3>
+            <table class="table">
+                <thead><tr><th>Сэдэв</th><th>Хөтөлбөр</th><th>Тайлбар</th><th>Үйлдэл</th></tr></thead>
+                <tbody>
+                ${editableCatalog.length ? editableCatalog.map(topic => `<tr><td><input id="teacher-edit-title-${topic.id}" value="${escapeHtml(safeTopicTitle(topic))}"></td><td><input id="teacher-edit-program-${topic.id}" value="${escapeHtml(topic.program)}"></td><td><textarea id="teacher-edit-description-${topic.id}" style="min-height:72px;">${escapeHtml(safeText(topic.description, ""))}</textarea></td><td><button class="action-btn" onclick="updateTeacherTopic(${topic.id})">Засах</button><button class="outline-btn" style="margin-top:8px;" onclick="deleteTopic(${topic.id}, 'TEACHER')">Устгах</button></td></tr>`).join("") : `<tr><td colspan="4">Засах боломжтой сэдэв алга.</td></tr>`}
+                </tbody>
+            </table>
+        </div>
+        <div class="card">
+            <h3>Удирдаж буй оюутнууд</h3>
+            <table class="table">
+                <thead><tr><th>Оюутан</th><th>Сэдэв</th><th>Төлөвлөгөө</th></tr></thead>
+                <tbody>
+                ${supervisedStudents.length ? supervisedStudents.map(item => `<tr><td>${safePersonName(item.studentName)}</td><td>${safeTopicTitle(item)}</td><td>${renderStatus(item.planStatus ?? "DRAFT")}</td></tr>`).join("") : `<tr><td colspan="3">Удирдаж буй оюутан алга.</td></tr>`}
+                </tbody>
+            </table>
+        </div>
     `;
 }
 
@@ -386,6 +428,7 @@ function renderDepartmentTopics() {
     const topics = filterSearch(state.workflow.topics.pendingDepartmentApprovalTopics);
     const teacherCatalogTopics = topics.filter(topic => topic.ownerStudentId == null);
     const studentOwnedTopics = topics.filter(topic => topic.ownerStudentId != null);
+    const approvedCatalogTopics = state.dashboard.topics.filter(topic => topic.ownerStudentId == null && topic.status === "AVAILABLE");
     const teacherOptions = state.dashboard.users
         .filter(user => user.role === "TEACHER")
         .map(user => `<option value="${user.id}">${user.firstName} ${user.lastName}</option>`)
@@ -394,6 +437,15 @@ function renderDepartmentTopics() {
     return `
         <h1>Тэнхимийн сэдэв баталгаажуулалт</h1>
         <p class="page-sub">Багшийн дэвшүүлсэн сэдвийг open catalog руу оруулах, оюутны сонгосон сэдэвт advisor томилох хэсэг.</p>
+        <div class="card">
+            <h3>Батлагдсан сэдэв шууд үүсгэх</h3>
+            <div class="field-list">
+                <div class="field"><label>Сэдвийн нэр</label><input id="departmentTopicTitle"></div>
+                <div class="field"><label>Хөтөлбөр</label><input id="departmentTopicProgram" value="B.SE"></div>
+                <div class="essay"><label>Тайлбар</label><textarea id="departmentTopicDescription"></textarea></div>
+                <div><button class="action-btn" onclick="publishDepartmentTopic()">Батлагдсан сэдэв үүсгэх</button></div>
+            </div>
+        </div>
         <div class="card">
             <h3>Catalog руу оруулах багшийн сэдвүүд</h3>
             <table class="table">
@@ -409,6 +461,15 @@ function renderDepartmentTopics() {
                 <thead><tr><th>Сэдэв</th><th>Оюутан</th><th>Advisor</th><th>Тайлбар</th><th>Үйлдэл</th></tr></thead>
                 <tbody>
                 ${studentOwnedTopics.length ? studentOwnedTopics.map(topic => `<tr${highlightRow(topic.id)}><td>${renderNewBadge(topic.id)}${safeTopicTitle(topic)}</td><td>${safePersonName(topic.ownerStudentName)}</td><td><select id="advisor-${topic.id}">${teacherOptions}</select></td><td><textarea id="department-topic-note-${topic.id}" style="min-height:72px;"></textarea></td><td><button class="action-btn" onclick="departmentTopicDecision(${topic.id}, true)">Эцэслэн батлах</button><button class="outline-btn" style="margin-top:8px;" onclick="departmentTopicDecision(${topic.id}, false)">Буцаах</button></td></tr>`).join("") : `<tr><td colspan="5">Эцэслэх оюутны сэдэв алга.</td></tr>`}
+                </tbody>
+            </table>
+        </div>
+        <div class="card">
+            <h3>Батлагдсан сэдвүүдийг засах, устгах</h3>
+            <table class="table">
+                <thead><tr><th>Сэдэв</th><th>Хөтөлбөр</th><th>Тайлбар</th><th>Үйлдэл</th></tr></thead>
+                <tbody>
+                ${approvedCatalogTopics.length ? approvedCatalogTopics.map(topic => `<tr><td><input id="department-edit-title-${topic.id}" value="${escapeHtml(safeTopicTitle(topic))}"></td><td><input id="department-edit-program-${topic.id}" value="${escapeHtml(topic.program)}"></td><td><textarea id="department-edit-description-${topic.id}" style="min-height:72px;">${escapeHtml(safeText(topic.description, ""))}</textarea></td><td><button class="action-btn" onclick="updateDepartmentTopic(${topic.id})">Засах</button><button class="outline-btn" style="margin-top:8px;" onclick="deleteTopic(${topic.id}, 'DEPARTMENT')">Устгах</button></td></tr>`).join("") : `<tr><td colspan="4">Батлагдсан сэдэв алга.</td></tr>`}
                 </tbody>
             </table>
         </div>
@@ -628,7 +689,7 @@ function renderReviewDesk() {
         <h3>Weekly review</h3>
         <div class="field-list">
             <div class="field"><label>Plan</label><select id="reviewPlanId">${options}</select></div>
-            <div class="field"><label>7 хоног</label><input id="reviewWeek" type="number" min="1" max="15" value="1"></div>
+            <div class="field"><label>7 хоног</label><input id="reviewWeek" type="number" min="1" max="${PLAN_WEEKS}" value="1"></div>
             <div class="field"><label>Оноо</label><input id="reviewScore" type="number" min="0" max="100" value="90"></div>
             <div class="essay"><label>Тайлбар</label><textarea id="reviewComment"></textarea></div>
             <div><button class="action-btn" onclick="submitReview()">Review бүртгэх</button></div>
@@ -659,6 +720,15 @@ function renderStudentIdentityFields(user) {
         <div class="field"><label>Хөтөлбөр</label><input value="${user.program ?? "B.SE"}" disabled></div>
         <div class="field"><label>Тэнхим</label><input value="${user.departmentName}" disabled></div>
     `;
+}
+
+function getTeacherSupervisedStudents(teacherId) {
+    return state.dashboard.topics
+        .filter(topic => topic.advisorTeacherId === teacherId && topic.ownerStudentId != null && topic.status === "APPROVED")
+        .map(topic => ({
+            ...topic,
+            planStatus: state.dashboard.plans.find(plan => plan.topicId === topic.id)?.status
+        }));
 }
 
 function getActiveUser() {
@@ -754,6 +824,20 @@ async function publishTeacherTopic() {
     render();
 }
 
+async function publishDepartmentTopic() {
+    const user = getActiveUser();
+    const title = document.getElementById("departmentTopicTitle").value?.trim() || "Шинэ батлагдсан сэдэв";
+    const result = await postJson("/api/verification/topics/department-proposals", {
+        departmentId: user.id,
+        title,
+        description: document.getElementById("departmentTopicDescription").value || "Тайлбар оруулаагүй.",
+        program: document.getElementById("departmentTopicProgram").value || "B.SE"
+    }, () => `"${title}" батлагдсан сэдэв нийтлэгдлээ.`);
+    state.lastTopicId = result?.topic?.id ?? null;
+    setActivePage("topics", false);
+    render();
+}
+
 async function claimTopic(topicId) {
     const result = await postJson("/api/verification/topics/selections", {
         topicId,
@@ -762,6 +846,56 @@ async function claimTopic(topicId) {
     state.lastTopicId = result?.topic?.id ?? topicId;
     state.selectedTopicId = null;
     state.topicMode = "list";
+    render();
+}
+
+async function updateStudentTopic(topicId) {
+    const result = await postJson("/api/verification/topics/student-updates", {
+        topicId,
+        studentId: getActiveUser().id,
+        title: document.getElementById("student-topic-title").value,
+        description: document.getElementById("student-topic-description").value,
+        program: document.getElementById("student-topic-program").value
+    }, topic => `"${safeTopicTitle(topic)}" сэдэв шинэчлэгдлээ.`);
+    state.lastTopicId = result?.topic?.id ?? topicId;
+    render();
+}
+
+async function updateTeacherTopic(topicId) {
+    const result = await postJson("/api/verification/topics/teacher-updates", {
+        topicId,
+        teacherId: getActiveUser().id,
+        title: document.getElementById(`teacher-edit-title-${topicId}`).value,
+        description: document.getElementById(`teacher-edit-description-${topicId}`).value,
+        program: document.getElementById(`teacher-edit-program-${topicId}`).value
+    }, topic => `"${safeTopicTitle(topic)}" сэдэв шинэчлэгдлээ.`);
+    state.lastTopicId = result?.topic?.id ?? topicId;
+    render();
+}
+
+async function updateDepartmentTopic(topicId) {
+    const result = await postJson("/api/verification/topics/department-updates", {
+        topicId,
+        departmentId: getActiveUser().id,
+        title: document.getElementById(`department-edit-title-${topicId}`).value,
+        description: document.getElementById(`department-edit-description-${topicId}`).value,
+        program: document.getElementById(`department-edit-program-${topicId}`).value
+    }, topic => `"${safeTopicTitle(topic)}" батлагдсан сэдэв шинэчлэгдлээ.`);
+    state.lastTopicId = result?.topic?.id ?? topicId;
+    render();
+}
+
+async function deleteTopic(topicId, actorRole) {
+    const result = await postJson("/api/verification/topics/deletions", {
+        topicId,
+        actorId: getActiveUser().id,
+        actorRole
+    }, () => "Сэдэв устгагдлаа.");
+    state.lastTopicId = result?.topic?.id ?? null;
+    if (state.selectedTopicId === topicId) {
+        state.selectedTopicId = null;
+        state.topicMode = "list";
+    }
     render();
 }
 
@@ -878,7 +1012,7 @@ async function postJson(url, body, successTextFactory = null) {
 }
 
 function collectTaskInputs() {
-    return Array.from({ length: 15 }, (_, index) => {
+    return Array.from({ length: PLAN_WEEKS }, (_, index) => {
         const week = index + 1;
         return {
             week,
@@ -890,7 +1024,7 @@ function collectTaskInputs() {
 }
 
 function createDefaultTasks(topicTitle) {
-    return Array.from({ length: 15 }, (_, index) => ({
+    return Array.from({ length: PLAN_WEEKS }, (_, index) => ({
         week: index + 1,
         title: `${topicTitle} - Week ${index + 1}`,
         deliverable: index < 3 ? "Requirement / literature output" : index < 10 ? "Implementation increment" : "Testing / report",
@@ -916,6 +1050,7 @@ function renderStatus(status) {
         PENDING_DEPARTMENT_APPROVAL: "Тэнхим хүлээж байна",
         APPROVED: "Батлагдсан",
         REJECTED: "Буцаагдсан",
+        SUPERSEDED: "Хүчингүй болсон",
         DRAFT: "Draft"
     };
     return labels[status] ?? status;
@@ -959,7 +1094,7 @@ function formatDateShort(value) {
 
 function planEndDate() {
     const date = new Date();
-    date.setDate(date.getDate() + 105);
+    date.setDate(date.getDate() + PLAN_WEEKS * 7);
     return date.toLocaleDateString("mn-MN");
 }
 
@@ -993,18 +1128,18 @@ function renderAuthScreen(initialMessage = "", isError = false) {
                 <div>
                     <div class="logo-mark" style="border-color:white;color:white;">M</div>
                     <h1>Дипломын ажлыг удирдах систем</h1>
-                    <p>Бүртгэл үүсгэх хэсэггүй. Оюутан, багш, тэнхимийн хэрэглэгчид СИСИ эрхээрээ шууд нэвтэрнэ.</p>
+                    <p>Оюутан, багш, тэнхимийн хэрэглэгч эхлээд өөрийн нэвтрэх нэрээр бүртгүүлж, дараа нь үүсгэсэн нууц үгээрээ нэвтэрнэ.</p>
                 </div>
                 <div class="auth-points">
-                    <div><strong>Оюутан</strong><br>СИСИ ID-аараа нэвтэрнэ.</div>
-                    <div><strong>Багш</strong><br>Ажилтны код `tch001` хэлбэрээр нэвтэрнэ.</div>
-                    <div><strong>Тэнхим</strong><br>`sisi-admin` эрхээр нэвтэрнэ.</div>
+                    <div><strong>Оюутан</strong><br>СИСИ ID-аараа бүртгүүлнэ.</div>
+                    <div><strong>Багш</strong><br>Ажилтны кодоороо бүртгүүлнэ.</div>
+                    <div><strong>Тэнхим</strong><br>Тэнхимийн эрхээрээ бүртгүүлнэ.</div>
                 </div>
             </section>
             <section class="auth-pane">
                 <div>
                     <h2>Нэвтрэх</h2>
-                    <p class="auth-sub">СИСИ эрх эсвэл системийн нэвтрэх нэрээ оруулна. Шинэ бүртгэл хийх хэсэг байхгүй.</p>
+                    <p class="auth-sub">Хэрэв өмнө нь бүртгүүлээгүй бол доорх бүртгэлийн хэсгээр нэг удаа бүртгэл үүсгэнэ.</p>
                 </div>
                 <div id="authMessage" class="message ${initialMessage ? "show" : ""} ${isError ? "error" : "success"}">${escapeHtml(initialMessage)}</div>
                 <form id="loginForm" class="auth-form">
@@ -1018,11 +1153,33 @@ function renderAuthScreen(initialMessage = "", isError = false) {
                     </div>
                     <div class="auth-actions">
                         <button class="action-btn" type="submit">Нэвтрэх</button>
+                        <button class="soft-btn" type="button" id="registerToggle">Бүртгүүлэх</button>
                         <button class="link-btn" type="button" id="forgotToggle">Нууц үг сэргээх</button>
                     </div>
                 </form>
+                <div id="registerPanel" class="hidden">
+                    <div class="auth-note">СИСИ ID, ажилтны код, эсвэл тэнхимийн нэвтрэх нэрээ ашиглаад шинэ нууц үг үүсгэнэ.</div>
+                    <form id="registerForm" class="auth-form" style="margin-top:14px;">
+                        <div>
+                            <label class="auth-label" for="registerUsername">СИСИ ID / нэвтрэх нэр</label>
+                            <input class="auth-input" id="registerUsername" placeholder="22b1num0027 эсвэл tch001" autocomplete="username">
+                        </div>
+                        <div>
+                            <label class="auth-label" for="registerPassword">Шинэ нууц үг</label>
+                            <input class="auth-input" id="registerPassword" type="password" placeholder="Хамгийн багадаа 6 тэмдэгт" autocomplete="new-password">
+                        </div>
+                        <div>
+                            <label class="auth-label" for="registerConfirmPassword">Нууц үг давтах</label>
+                            <input class="auth-input" id="registerConfirmPassword" type="password" placeholder="Нууц үгээ давтаж оруулна уу" autocomplete="new-password">
+                        </div>
+                        <div class="auth-actions">
+                            <button class="soft-btn" type="submit">Бүртгэх</button>
+                            <button class="link-btn" type="button" id="registerClose">Хаах</button>
+                        </div>
+                    </form>
+                </div>
                 <div id="forgotPanel" class="hidden">
-                    <div class="auth-note">Сэргээх үед түр нууц үгийг системийн default password-р шинэчилнэ.</div>
+                    <div class="auth-note">Сэргээх үед систем түр нууц үг үүсгээд буцаана.</div>
                     <form id="forgotForm" class="auth-form" style="margin-top:14px;">
                         <div>
                             <label class="auth-label" for="forgotUsername">СИСИ ID / нэвтрэх нэр</label>
@@ -1039,9 +1196,19 @@ function renderAuthScreen(initialMessage = "", isError = false) {
     `;
 
     document.getElementById("loginForm").addEventListener("submit", handleLogin);
+    document.getElementById("registerToggle").addEventListener("click", () => {
+        document.getElementById("registerPanel").classList.remove("hidden");
+        document.getElementById("registerUsername").value = document.getElementById("loginUsername").value;
+        document.getElementById("forgotPanel").classList.add("hidden");
+    });
+    document.getElementById("registerClose").addEventListener("click", () => {
+        document.getElementById("registerPanel").classList.add("hidden");
+    });
+    document.getElementById("registerForm").addEventListener("submit", handleRegister);
     document.getElementById("forgotToggle").addEventListener("click", () => {
         document.getElementById("forgotPanel").classList.remove("hidden");
         document.getElementById("forgotUsername").value = document.getElementById("loginUsername").value;
+        document.getElementById("registerPanel").classList.add("hidden");
     });
     document.getElementById("forgotClose").addEventListener("click", () => {
         document.getElementById("forgotPanel").classList.add("hidden");
@@ -1070,6 +1237,32 @@ async function handleLogin(event) {
         showMessage(payload.message || "Амжилттай нэвтэрлээ.", false);
     } catch (error) {
         showAuthMessage(error.message || "Нэвтрэх үед алдаа гарлаа.", true);
+    }
+}
+
+async function handleRegister(event) {
+    event.preventDefault();
+    const username = document.getElementById("registerUsername").value.trim();
+    const password = document.getElementById("registerPassword").value;
+    const confirmPassword = document.getElementById("registerConfirmPassword").value;
+
+    try {
+        const response = await fetch("/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password, confirmPassword })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.message || "Бүртгэх үед алдаа гарлаа.");
+        }
+        showAuthMessage(payload.message || "Бүртгэл амжилттай үүслээ.", false);
+        document.getElementById("loginUsername").value = payload.username ?? username;
+        document.getElementById("loginPassword").value = "";
+        document.getElementById("registerPanel").classList.add("hidden");
+        document.getElementById("loginPassword").focus();
+    } catch (error) {
+        showAuthMessage(error.message || "Бүртгэх үед алдаа гарлаа.", true);
     }
 }
 

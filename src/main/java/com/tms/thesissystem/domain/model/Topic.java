@@ -6,9 +6,9 @@ import java.util.List;
 
 public class Topic {
     private final Long id;
-    private final String title;
-    private final String description;
-    private final String program;
+    private String title;
+    private String description;
+    private String program;
     private final Long proposerId;
     private final String proposerName;
     private final UserRole proposerRole;
@@ -50,6 +50,11 @@ public class Topic {
     public static Topic studentProposal(Long id, String title, String description, String program, User student, LocalDateTime now) {
         return new Topic(id, title, description, program, student.id(), student.fullName(), student.role(),
                 student.id(), student.fullName(), null, null, TopicStatus.PENDING_TEACHER_APPROVAL, now, now, List.of());
+    }
+
+    public static Topic departmentCatalogTopic(Long id, String title, String description, String program, User department, LocalDateTime now) {
+        return new Topic(id, title, description, program, department.id(), department.fullName(), department.role(),
+                null, null, null, null, TopicStatus.AVAILABLE, now, now, List.of());
     }
 
     public void claim(User student, LocalDateTime now) {
@@ -117,6 +122,34 @@ public class Topic {
         ownerStudentId = null;
         ownerStudentName = null;
         status = TopicStatus.AVAILABLE;
+    }
+
+    public void revise(String title, String description, String program, LocalDateTime now) {
+        this.title = title;
+        this.description = description;
+        this.program = program;
+        if (status == TopicStatus.REJECTED) {
+            approvals.clear();
+            advisorTeacherId = null;
+            advisorTeacherName = null;
+            if (ownerStudentId != null) {
+                status = TopicStatus.PENDING_TEACHER_APPROVAL;
+            } else if (proposerRole == UserRole.TEACHER) {
+                status = TopicStatus.PENDING_DEPARTMENT_APPROVAL;
+            } else if (proposerRole == UserRole.DEPARTMENT) {
+                status = TopicStatus.AVAILABLE;
+            }
+        }
+        this.updatedAt = now;
+    }
+
+    public void delete(LocalDateTime now) {
+        ownerStudentId = null;
+        ownerStudentName = null;
+        advisorTeacherId = null;
+        advisorTeacherName = null;
+        status = TopicStatus.DELETED;
+        updatedAt = now;
     }
 
     public Long id() { return id; }

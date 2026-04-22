@@ -20,7 +20,10 @@ public class ApiResponseMapper {
     public ApiDtos.DashboardResponse toDashboardResponse(WorkflowQueryService.DashboardSnapshot snapshot) {
         return new ApiDtos.DashboardResponse(
                 snapshot.users().stream().map(this::toUserDto).toList(),
-                snapshot.topics().stream().map(this::toTopicDto).toList(),
+                snapshot.topics().stream()
+                        .filter(topic -> topic.status() != TopicStatus.DELETED)
+                        .map(this::toTopicDto)
+                        .toList(),
                 snapshot.plans().stream().map(this::toPlanDto).toList(),
                 snapshot.reviews().stream().map(this::toReviewDto).toList(),
                 snapshot.notifications().stream().map(this::toNotificationDto).toList(),
@@ -34,7 +37,10 @@ public class ApiResponseMapper {
     }
 
     public ApiDtos.WorkflowStateResponse toWorkflowStateResponse(WorkflowQueryService.DashboardSnapshot snapshot) {
-        List<ApiDtos.TopicDto> topics = snapshot.topics().stream().map(this::toTopicDto).toList();
+        List<ApiDtos.TopicDto> topics = snapshot.topics().stream()
+                .filter(topic -> topic.status() != TopicStatus.DELETED)
+                .map(this::toTopicDto)
+                .toList();
         List<ApiDtos.PlanDto> plans = snapshot.plans().stream().map(this::toPlanDto).toList();
         return new ApiDtos.WorkflowStateResponse(
                 snapshot.users().stream().map(this::toUserDto).toList(),
@@ -62,7 +68,6 @@ public class ApiResponseMapper {
     }
 
     public ApiDtos.TopicDto toTopicDto(Topic topic) {
-        String exposedStatus = topic.status() == TopicStatus.AVAILABLE ? TopicStatus.APPROVED.name() : topic.status().name();
         return new ApiDtos.TopicDto(
                 topic.id(),
                 topic.title(),
@@ -75,7 +80,7 @@ public class ApiResponseMapper {
                 topic.ownerStudentName(),
                 topic.advisorTeacherId(),
                 topic.advisorTeacherName(),
-                exposedStatus,
+                topic.status().name(),
                 topic.createdAt(),
                 topic.updatedAt(),
                 topic.approvals().stream().map(this::toApprovalRecordDto).toList()

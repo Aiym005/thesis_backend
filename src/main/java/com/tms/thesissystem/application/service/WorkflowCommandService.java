@@ -17,13 +17,16 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class WorkflowCommandService {
     private static final long STUDENT_OFFSET = 100_000L;
     private static final long TEACHER_OFFSET = 200_000L;
     private static final long DEPARTMENT_OFFSET = 300_000L;
+    private static final int PLAN_WEEKS = Plan.REQUIRED_WEEKS;
 
     private final WorkflowRepository repository;
     private final WorkflowEventPublisher eventPublisher;
@@ -35,20 +38,100 @@ public class WorkflowCommandService {
 
     public Topic proposeTopic(Long studentId, String title, String description, String program) {
         User student = getUser(studentId, UserRole.STUDENT);
+        validateUniqueTopic(null, title, program);
         Topic topic = Topic.studentProposal(repository.nextTopicId(), title, description, program, student, LocalDateTime.now());
         topic = repository.saveTopic(topic);
         publish(topicEvent(topic, "TOPIC_PROPOSED", student.fullName(), "Оюутан шинэ сэдэв дэвшүүллээ.",
-                "Шинэ сэдэв баталгаажуулалт хүлээж байна", student.fullName() + " шинэ дипломын сэдэв дэвшүүллээ.", userIdsByRole(UserRole.TEACHER)));
+                "Шинэ сэдэв баталгаажуулалт хүлээж байна", student.fullName() + " шинэ дипломын сэдэв дэвшүүллээ.",
+                notifyAllStakeholders(student.id())));
         return topic;
     }
 
     public Topic createTeacherTopic(Long teacherId, String title, String description, String program) {
         User teacher = getUser(teacherId, UserRole.TEACHER);
+        validateUniqueTopic(null, title, program);
         Topic topic = Topic.teacherCatalogTopic(repository.nextTopicId(), title, description, program, teacher, LocalDateTime.now());
         topic = repository.saveTopic(topic);
         publish(topicEvent(topic, "TOPIC_PROPOSED_BY_TEACHER", teacher.fullName(), "Багш шинэ сэдэв дэвшүүллээ.",
                 "Шинэ багшийн сэдэв тэнхимийн баталгаажуулалт хүлээж байна", teacher.fullName() + " шинэ сэдэв дэвшүүллээ.",
+                notifyAllStakeholders(teacher.id())));
+        return topic;
+    }
+
+    public Topic createDepartmentTopic(Long departmentId, String title, String description, String program) {
+        User department = getUser(departmentId, UserRole.DEPARTMENT);
+        validateUniqueTopic(null, title, program);
+        Topic topic = Topic.departmentCatalogTopic(repository.nextTopicId(), title, description, program, department, LocalDateTime.now());
+        topic = repository.saveTopic(topic);
+        publish(topicEvent(topic, "TOPIC_PUBLISHED_BY_DEPARTMENT", department.fullName(), "Тэнхим батлагдсан сэдэв нийтэллээ.",
+                "Шинэ батлагдсан сэдэв нийтлэгдлээ", "\"" + topic.title() + "\" сэдвийг тэнхим шууд нийтэллээ.",
+                notifyAllStakeholders(department.id())));
+        return topic;
+    }
+
+    public Topic updateStudentTopic(Long topicId, Long studentId, String title, String description, String program) {
+        User student = getUser(studentId, UserRole.STUDENT);
+        Topic topic = getTopic(topicId);
+        if (!student.id().equals(topic.proposerId()) || topic.proposerRole() != UserRole.STUDENT) {
+            throw new IllegalStateException("Оюутан зөвхөн өөрийн дэвшүүлсэн сэдвийг засна.");
+        }
+        if (topic.status() == TopicStatus.APPROVED || topic.status() == TopicStatus.SUPERSEDED || topic.status() == TopicStatus.DELETED) {
+            throw new IllegalStateException("Энэ сэдвийг засах боломжгүй.");
+        }
+        validateUniqueTopic(topic.id(), title, program);
+        topic.revise(title, description, program, LocalDateTime.now());
+        topic = repository.saveTopic(topic);
+        publish(topicEvent(topic, "TOPIC_UPDATED_BY_STUDENT", student.fullName(), "Оюутан сэдвийн мэдээллээ заслаа.",
+                "Сэдвийн мэдээлэл шинэчлэгдлээ", "\"" + topic.title() + "\" сэдвийн мэдээлэл шинэчлэгдлээ.",
+                userIdsByRole(UserRole.TEACHER)));
+        return topic;
+    }
+
+    public Topic updateTeacherTopic(Long topicId, Long teacherId, String title, String description, String program) {
+        User teacher = getUser(teacherId, UserRole.TEACHER);
+        Topic topic = getTopic(topicId);
+        if (!teacher.id().equals(topic.proposerId()) || topic.proposerRole() != UserRole.TEACHER || topic.ownerStudentId() != null) {
+            throw new IllegalStateException("Багш зөвхөн өөрийн catalog сэдвийг засна.");
+        }
+        if (topic.status() == TopicStatus.DELETED || topic.status() == TopicStatus.SUPERSEDED) {
+            throw new IllegalStateException("Энэ сэдвийг засах боломжгүй.");
+        }
+        validateUniqueTopic(topic.id(), title, program);
+        topic.revise(title, description, program, LocalDateTime.now());
+        topic = repository.saveTopic(topic);
+        publish(topicEvent(topic, "TOPIC_UPDATED_BY_TEACHER", teacher.fullName(), "Багш сэдвийн мэдээллээ заслаа.",
+                "Сэдвийн мэдээлэл шинэчлэгдлээ", "\"" + topic.title() + "\" сэдвийн мэдээлэл шинэчлэгдлээ.",
                 userIdsByRole(UserRole.DEPARTMENT)));
+        return topic;
+    }
+
+    public Topic updateDepartmentTopic(Long topicId, Long departmentId, String title, String description, String program) {
+        User department = getUser(departmentId, UserRole.DEPARTMENT);
+        Topic topic = getTopic(topicId);
+        if (topic.ownerStudentId() != null || topic.status() == TopicStatus.DELETED || topic.status() == TopicStatus.SUPERSEDED) {
+            throw new IllegalStateException("Тэнхим зөвхөн нээлттэй батлагдсан сэдвийг засна.");
+        }
+        validateUniqueTopic(topic.id(), title, program);
+        topic.revise(title, description, program, LocalDateTime.now());
+        topic = repository.saveTopic(topic);
+        publish(topicEvent(topic, "TOPIC_UPDATED_BY_DEPARTMENT", department.fullName(), "Тэнхим батлагдсан сэдвийг заслаа.",
+                "Батлагдсан сэдэв шинэчлэгдлээ", "\"" + topic.title() + "\" батлагдсан сэдвийн мэдээлэл шинэчлэгдлээ.",
+                userIdsByRole(UserRole.STUDENT)));
+        return topic;
+    }
+
+    public Topic deleteTopic(Long topicId, Long actorId, UserRole role) {
+        User actor = getUser(actorId, role);
+        Topic topic = getTopic(topicId);
+        switch (role) {
+            case STUDENT -> validateStudentDelete(actor, topic);
+            case TEACHER -> validateTeacherDelete(actor, topic);
+            case DEPARTMENT -> validateDepartmentDelete(topic);
+        }
+        topic.delete(LocalDateTime.now());
+        topic = repository.saveTopic(topic);
+        publish(topicEvent(topic, "TOPIC_DELETED", actor.fullName(), "Сэдэвийг идэвхгүй болголоо.",
+                "Сэдэв устгагдлаа", "\"" + topic.title() + "\" сэдэв устгагдлаа.", List.of()));
         return topic;
     }
 
@@ -58,7 +141,8 @@ public class WorkflowCommandService {
         topic.claim(student, LocalDateTime.now());
         topic = repository.saveTopic(topic);
         publish(topicEvent(topic, "TOPIC_CLAIMED", student.fullName(), "Оюутан бэлэн сэдвийг сонголоо.",
-                "Сонгосон сэдэв баталгаажуулалт хүлээж байна", student.fullName() + " \"" + topic.title() + "\" сэдвийг сонголоо.", userIdsByRole(UserRole.TEACHER)));
+                "Сонгосон сэдэв баталгаажуулалт хүлээж байна", student.fullName() + " \"" + topic.title() + "\" сэдвийг сонголоо.",
+                notifyAllStakeholders(student.id(), topic.proposerId())));
         return topic;
     }
 
@@ -73,8 +157,9 @@ public class WorkflowCommandService {
                 approved ? "Сэдэв тэнхимийн баталгаажуулалт руу шилжлээ" : "Сэдэв буцаагдлаа",
                 approved ? "\"" + topic.title() + "\" сэдвийг тэнхимийн баталгаажуулалт руу шилжүүллээ."
                         : "\"" + topic.title() + "\" сэдвийг буцаалаа. Тайлбар: " + safeNote(note),
-                approved ? userIdsByRole(UserRole.DEPARTMENT)
-                        : previousOwnerStudentId == null ? List.of() : List.of(previousOwnerStudentId)));
+                approved
+                        ? notifyAllStakeholders(teacher.id(), topic.proposerId(), topic.ownerStudentId())
+                        : notifyAllStakeholders(teacher.id(), topic.proposerId(), previousOwnerStudentId)));
         return topic;
     }
 
@@ -103,17 +188,13 @@ public class WorkflowCommandService {
         if (approved && topic.ownerStudentId() != null) {
             supersedePreviousTopics(topic);
         }
-        List<Long> recipients = new ArrayList<>();
-        if (topic.ownerStudentId() != null) recipients.add(topic.ownerStudentId());
-        else if (previousOwnerStudentId != null) recipients.add(previousOwnerStudentId);
-        if (approved && advisor != null) recipients.add(advisor.id());
-        if (approved && topic.ownerStudentId() == null) {
-            recipients.addAll(userIdsByRole(UserRole.STUDENT));
-            recipients.add(topic.proposerId());
-        }
-        if (!approved && topic.ownerStudentId() == null) {
-            recipients.add(topic.proposerId());
-        }
+        List<Long> recipients = notifyAllStakeholders(
+                department.id(),
+                topic.proposerId(),
+                topic.ownerStudentId(),
+                previousOwnerStudentId,
+                advisor == null ? null : advisor.id()
+        );
         publish(topicEvent(topic, approved ? "TOPIC_FINALIZED" : "TOPIC_REJECTED_BY_DEPARTMENT", department.fullName(),
                 approved ? (topic.ownerStudentId() == null ? "Тэнхим багшийн дэвшүүлсэн сэдвийг баталж нээлттэй жагсаалт руу орууллаа." : "Тэнхим сэдвийг эцэслэн баталж удирдагч томиллоо.") : "Тэнхим сэдвийг буцаалаа.",
                 approved ? (topic.ownerStudentId() == null ? "Сэдэв нээлттэй жагсаалт руу шилжлээ" : "Сэдэв эцэслэн батлагдлаа") : "Сэдэв тэнхим дээр буцаагдлаа",
@@ -128,15 +209,17 @@ public class WorkflowCommandService {
     public Plan savePlan(Long studentId, Long topicId, List<WeeklyTask> tasks) {
         User student = getUser(studentId, UserRole.STUDENT);
         Topic topic = resolveApprovedTopicForPlan(student.id(), topicId);
+        List<WeeklyTask> normalizedTasks = normalizePlanTasks(tasks);
+        validateTaskCount(normalizedTasks);
         Plan plan = repository.findPlanByStudentId(studentId)
                 .filter(existing -> existing.topicId().equals(topic.id()))
                 .orElseGet(() -> new Plan(repository.nextPlanId(), topic.id(), topic.title(), student.id(), student.fullName(),
-                        PlanStatus.DRAFT, tasks, List.of(), LocalDateTime.now(), LocalDateTime.now()));
-        plan.updateTasks(tasks, LocalDateTime.now());
+                        PlanStatus.DRAFT, normalizedTasks, List.of(), LocalDateTime.now(), LocalDateTime.now()));
+        plan.updateTasks(normalizedTasks, LocalDateTime.now());
         plan = repository.savePlan(plan);
         publish(new WorkflowEvent("PLAN", plan.id(), "PLAN_SAVED", student.fullName(), "Оюутан 15 долоо хоногийн төлөвлөгөөг шинэчиллээ.",
                 "Төлөвлөгөө draft хэлбэрээр хадгалагдлаа", student.fullName() + " 15 долоо хоногийн төлөвлөгөөг хадгаллаа.",
-                List.of(student.id()), LocalDateTime.now()));
+                notifyAllStakeholders(student.id(), topic.proposerId(), topic.advisorTeacherId()), LocalDateTime.now()));
         return plan;
     }
 
@@ -147,11 +230,10 @@ public class WorkflowCommandService {
         plan.submit(LocalDateTime.now());
         plan = repository.savePlan(plan);
         Topic topic = getTopic(plan.topicId());
-        List<Long> recipients = new ArrayList<>();
         if (topic.advisorTeacherId() == null) {
             throw new IllegalStateException("Төлөвлөгөө илгээхийн өмнө сэдэв дээр удирдагч багш томилогдсон байх ёстой.");
         }
-        recipients.add(topic.advisorTeacherId());
+        List<Long> recipients = notifyAllStakeholders(student.id(), topic.proposerId(), topic.advisorTeacherId());
         publish(new WorkflowEvent("PLAN", plan.id(), "PLAN_SUBMITTED", student.fullName(), "Оюутан төлөвлөгөөг багшид илгээлээ.",
                 "Шинэ төлөвлөгөө баталгаажуулалт хүлээж байна", student.fullName() + " \"" + plan.topicTitle() + "\" сэдвийн 15 долоо хоногийн төлөвлөгөөг илгээлээ.",
                 recipients, LocalDateTime.now()));
@@ -171,7 +253,7 @@ public class WorkflowCommandService {
                 approved ? "Багш төлөвлөгөөг тэнхим рүү дамжууллаа." : "Багш төлөвлөгөөг буцаалаа.",
                 approved ? "Төлөвлөгөө тэнхимийн баталгаажуулалт руу шилжлээ" : "Төлөвлөгөө буцаагдлаа",
                 approved ? "Төлөвлөгөө тэнхимийн шат руу шилжлээ." : "Төлөвлөгөө буцаагдлаа. Тайлбар: " + safeNote(note),
-                approved ? userIdsByRole(UserRole.DEPARTMENT) : List.of(plan.studentId()), LocalDateTime.now()));
+                notifyAllStakeholders(teacher.id(), plan.studentId(), topic.proposerId(), topic.advisorTeacherId()), LocalDateTime.now()));
         return plan;
     }
 
@@ -181,9 +263,7 @@ public class WorkflowCommandService {
         plan.departmentDecision(department, approved, note, LocalDateTime.now());
         plan = repository.savePlan(plan);
         Topic topic = getTopic(plan.topicId());
-        List<Long> recipients = new ArrayList<>();
-        recipients.add(plan.studentId());
-        if (topic.advisorTeacherId() != null) recipients.add(topic.advisorTeacherId());
+        List<Long> recipients = notifyAllStakeholders(department.id(), plan.studentId(), topic.proposerId(), topic.advisorTeacherId());
         publish(new WorkflowEvent("PLAN", plan.id(), approved ? "PLAN_APPROVED" : "PLAN_REJECTED_BY_DEPARTMENT", department.fullName(),
                 approved ? "Тэнхим төлөвлөгөөг баталлаа." : "Тэнхим төлөвлөгөөг буцаалаа.",
                 approved ? "Төлөвлөгөө батлагдлаа" : "Төлөвлөгөө буцаагдлаа",
@@ -210,6 +290,19 @@ public class WorkflowCommandService {
         return new WorkflowEvent("TOPIC", topic.id(), action, actorName, detail, notificationTitle, notificationMessage, recipientIds, LocalDateTime.now());
     }
 
+    private List<Long> notifyAllStakeholders(Long... explicitUserIds) {
+        Set<Long> recipients = new LinkedHashSet<>();
+        recipients.addAll(userIdsByRole(UserRole.STUDENT));
+        recipients.addAll(userIdsByRole(UserRole.TEACHER));
+        recipients.addAll(userIdsByRole(UserRole.DEPARTMENT));
+        for (Long explicitUserId : explicitUserIds) {
+            if (explicitUserId != null) {
+                recipients.add(explicitUserId);
+            }
+        }
+        return List.copyOf(recipients);
+    }
+
     private void publish(WorkflowEvent event) { eventPublisher.publish(event); }
     private User getUser(Long userId, UserRole role) {
         Long resolvedUserId = normalizeUserId(userId, role);
@@ -221,6 +314,48 @@ public class WorkflowCommandService {
     private Plan getPlan(Long planId) { return repository.findPlanById(planId).orElseThrow(() -> new IllegalArgumentException("Төлөвлөгөө олдсонгүй.")); }
     private List<Long> userIdsByRole(UserRole role) { return repository.findUsersByRole(role).stream().map(User::id).toList(); }
     private String safeNote(String note) { return note == null || note.isBlank() ? "Тайлбар өгөөгүй" : note; }
+    private void validateTaskCount(List<WeeklyTask> tasks) {
+        if (tasks == null || tasks.size() != PLAN_WEEKS) {
+            throw new IllegalArgumentException("Төлөвлөгөө яг 15 долоо хоногийн мөртэй байх ёстой.");
+        }
+    }
+
+    private List<WeeklyTask> normalizePlanTasks(List<WeeklyTask> tasks) {
+        if (tasks == null) {
+            return null;
+        }
+        if (tasks.size() == PLAN_WEEKS) {
+            return tasks;
+        }
+        if (tasks.size() == PLAN_WEEKS - 1) {
+            List<WeeklyTask> normalized = new ArrayList<>(tasks);
+            normalized.add(new WeeklyTask(
+                    PLAN_WEEKS,
+                    "7 хоног " + PLAN_WEEKS + " - milestone",
+                    "Deliverable " + PLAN_WEEKS,
+                    "Тайлан дүгнэлт, эцсийн сайжруулалт"
+            ));
+            return List.copyOf(normalized);
+        }
+        return tasks;
+    }
+
+    private void validateUniqueTopic(Long excludedTopicId, String title, String program) {
+        String normalizedTitle = normalize(title);
+        String normalizedProgram = normalize(program);
+        boolean duplicateExists = repository.findAllTopics().stream()
+                .filter(topic -> excludedTopicId == null || !topic.id().equals(excludedTopicId))
+                .filter(topic -> topic.status() != TopicStatus.DELETED && topic.status() != TopicStatus.SUPERSEDED)
+                .anyMatch(topic -> normalize(topic.title()).equals(normalizedTitle)
+                        && normalize(topic.program()).equals(normalizedProgram));
+        if (duplicateExists) {
+            throw new IllegalArgumentException("Ижил нэртэй сэдэв энэ хөтөлбөр дээр аль хэдийн бүртгэлтэй байна.");
+        }
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase();
+    }
 
     private Topic resolveApprovedTopicForPlan(Long studentId, Long requestedTopicId) {
         if (requestedTopicId != null) {
@@ -253,6 +388,27 @@ public class WorkflowCommandService {
                     topic.supersede(now);
                     repository.saveTopic(topic);
                 });
+    }
+
+    private void validateStudentDelete(User actor, Topic topic) {
+        if (topic.proposerRole() != UserRole.STUDENT || !actor.id().equals(topic.proposerId())) {
+            throw new IllegalStateException("Оюутан зөвхөн өөрийн сэдвийг устгана.");
+        }
+        if (topic.status() == TopicStatus.APPROVED) {
+            throw new IllegalStateException("Батлагдсан сэдвийг оюутан устгах боломжгүй.");
+        }
+    }
+
+    private void validateTeacherDelete(User actor, Topic topic) {
+        if (topic.proposerRole() != UserRole.TEACHER || !actor.id().equals(topic.proposerId()) || topic.ownerStudentId() != null) {
+            throw new IllegalStateException("Багш зөвхөн өөрийн catalog сэдвийг устгана.");
+        }
+    }
+
+    private void validateDepartmentDelete(Topic topic) {
+        if (topic.ownerStudentId() != null) {
+            throw new IllegalStateException("Тэнхим зөвхөн нээлттэй батлагдсан сэдвийг устгана.");
+        }
     }
 
     private Long normalizeUserId(Long userId, UserRole role) {
