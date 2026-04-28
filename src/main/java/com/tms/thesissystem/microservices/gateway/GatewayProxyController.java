@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.tms.thesissystem.api.ApiDtos;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -25,6 +28,7 @@ import java.util.Map;
 
 @RestController
 public class GatewayProxyController {
+    private static final String SESSION_AUTH_USER = "auth.user";
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final String userServiceBaseUrl;
@@ -186,8 +190,21 @@ public class GatewayProxyController {
     }
 
     @PostMapping("/api/auth/login")
-    public ResponseEntity<String> login(@RequestBody String payload) throws IOException, InterruptedException {
-        return proxy(HttpMethod.POST, userServiceBaseUrl + "/api/users/login", payload);
+    public ResponseEntity<String> login(@RequestBody String payload, HttpServletRequest request) throws IOException, InterruptedException {
+        HttpResponse<String> response = send(HttpMethod.POST, userServiceBaseUrl + "/api/users/login", payload);
+        if (response.statusCode() >= 400) {
+            return jsonResponse(response.statusCode(), response.body());
+        }
+
+        ApiDtos.LoginResponse loginResponse = objectMapper.readValue(response.body(), ApiDtos.LoginResponse.class);
+        if (loginResponse.user() != null) {
+            HttpSession existingSession = request.getSession(false);
+            if (existingSession != null) {
+                existingSession.invalidate();
+            }
+            request.getSession(true).setAttribute(SESSION_AUTH_USER, loginResponse.user());
+        }
+        return jsonResponse(response.statusCode(), response.body());
     }
 
     @PostMapping("/api/auth/register")
@@ -198,6 +215,27 @@ public class GatewayProxyController {
     @PostMapping("/api/auth/forgot-password")
     public ResponseEntity<String> forgotPassword(@RequestBody String payload) throws IOException, InterruptedException {
         return proxy(HttpMethod.POST, userServiceBaseUrl + "/api/users/forgot-password", payload);
+    }
+
+    @GetMapping("/api/auth/session")
+    public ResponseEntity<String> session(HttpServletRequest request) throws IOException {
+        HttpSession session = request.getSession(false);
+        Object sessionUser = session == null ? null : session.getAttribute(SESSION_AUTH_USER);
+        if (!(sessionUser instanceof ApiDtos.AuthUserDto authUser)) {
+            return jsonResponse(200, objectMapper.writeValueAsString(new ApiDtos.SessionResponse(false, null)));
+        }
+        return jsonResponse(200, objectMapper.writeValueAsString(new ApiDtos.SessionResponse(true, authUser)));
+    }
+
+    @PostMapping("/api/auth/logout")
+    public ResponseEntity<String> logout(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            session.invalidate();
+        }
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"ok\":true}");
     }
 
     @GetMapping("/api/users")

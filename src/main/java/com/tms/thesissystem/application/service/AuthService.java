@@ -1,6 +1,9 @@
 package com.tms.thesissystem.application.service;
 
+import com.tms.thesissystem.application.port.WorkflowRepository;
 import com.tms.thesissystem.api.ApiDtos;
+import com.tms.thesissystem.domain.User;
+import com.tms.thesissystem.domain.UserRole;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -14,12 +17,12 @@ import java.util.regex.Pattern;
 @Service
 public class AuthService {
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9._@-]{3,64}$");
-    private final WorkflowQueryService queryService;
+    private final WorkflowRepository workflowRepository;
     private final AuthAccountStore authAccountStore;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    public AuthService(WorkflowQueryService queryService, AuthAccountStore authAccountStore) {
-        this.queryService = queryService;
+    public AuthService(WorkflowRepository workflowRepository, AuthAccountStore authAccountStore) {
+        this.workflowRepository = workflowRepository;
         this.authAccountStore = authAccountStore;
     }
 
@@ -42,8 +45,9 @@ public class AuthService {
             return new ApiDtos.LoginResponse(false, "Нэвтрэх нэр эсвэл нууц үг буруу байна.", null);
         }
         String role = normalizeStoredRole(account.get().role(), normalizedUsername);
+        Long resolvedUserId = resolveWorkflowUserId(account.get(), normalizedUsername, role);
         ApiDtos.AuthUserDto authUser = new ApiDtos.AuthUserDto(
-                account.get().userId(),
+                resolvedUserId,
                 account.get().username(),
                 account.get().displayName() == null || account.get().displayName().isBlank()
                         ? account.get().username()
@@ -77,12 +81,13 @@ public class AuthService {
             return new ApiDtos.RegistrationResponse(false, "Энэ хэрэглэгч аль хэдийн бүртгүүлсэн байна.", normalizedUsername);
         }
 
-        Long userId = authAccountStore.nextUserId();
+        UserRole role = inferRole(normalizedUsername);
+        User workflowUser = workflowRepository.createUserAccount(normalizedUsername, role);
         authAccountStore.save(
-                userId,
+                workflowUser.id(),
                 normalizedUsername,
                 hashPassword(normalizedPassword),
-                inferRole(normalizedUsername),
+                role.name().toLowerCase(Locale.ROOT),
                 normalizedUsername
         );
         return new ApiDtos.RegistrationResponse(true, "Бүртгэл амжилттай үүслээ. Одоо нэвтэрнэ үү.", normalizedUsername);
@@ -139,14 +144,14 @@ public class AuthService {
         return USERNAME_PATTERN.matcher(username).matches();
     }
 
-    private String inferRole(String normalizedUsername) {
-        if (normalizedUsername.startsWith("tch")) {
-            return "teacher";
+    private UserRole inferRole(String normalizedUsername) {
+        if (normalizedUsername.contains("@tms.mn")) {
+            return UserRole.TEACHER;
         }
         if (normalizedUsername.contains("admin") || normalizedUsername.contains("dept")) {
-            return "department";
+            return UserRole.DEPARTMENT;
         }
-        return "student";
+        return UserRole.STUDENT;
     }
 
     private String normalizeStoredRole(String storedRole, String username) {
@@ -154,6 +159,21 @@ public class AuthService {
         if (normalizedRole.equals("teacher") || normalizedRole.equals("department") || normalizedRole.equals("student")) {
             return normalizedRole;
         }
-        return inferRole(username);
+        return inferRole(username).name().toLowerCase(Locale.ROOT);
+    }
+
+    private Long resolveWorkflowUserId(AuthAccountStore.AuthAccount account, String normalizedUsername, String normalizedRole) {
+        UserRole role = UserRole.valueOf(normalizedRole.toUpperCase(Locale.ROOT));
+        Optional<User> directMatch = workflowRepository.findUserById(account.userId())
+                .filter(user -> user.role() == role);
+        if (directMatch.isPresent()) {
+            return directMatch.get().id();
+        }
+        return workflowRepository.findAllUsers().stream()
+                .filter(user -> user.role() == role)
+                .filter(user -> normalizedUsername.equals(normalize(user.loginId())))
+                .map(User::id)
+                .findFirst()
+                .orElse(account.userId());
     }
 }

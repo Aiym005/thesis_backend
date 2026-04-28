@@ -1,15 +1,15 @@
 package com.tms.thesissystem.application.service;
 
 import com.tms.thesissystem.application.port.WorkflowRepository;
-import com.tms.thesissystem.domain.model.AuditEntry;
-import com.tms.thesissystem.domain.model.Notification;
-import com.tms.thesissystem.domain.model.Plan;
-import com.tms.thesissystem.domain.model.PlanStatus;
-import com.tms.thesissystem.domain.model.Review;
-import com.tms.thesissystem.domain.model.Topic;
-import com.tms.thesissystem.domain.model.TopicStatus;
-import com.tms.thesissystem.domain.model.User;
-import com.tms.thesissystem.domain.model.UserRole;
+import com.tms.thesissystem.domain.AuditEntry;
+import com.tms.thesissystem.domain.Notification;
+import com.tms.thesissystem.domain.Plan;
+import com.tms.thesissystem.domain.PlanStatus;
+import com.tms.thesissystem.domain.Review;
+import com.tms.thesissystem.domain.Topic;
+import com.tms.thesissystem.domain.TopicStatus;
+import com.tms.thesissystem.domain.User;
+import com.tms.thesissystem.domain.UserRole;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;

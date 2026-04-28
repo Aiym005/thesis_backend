@@ -11,6 +11,6 @@ COPY --from=build /workspace/target/classes /app/classes
 COPY --from=build /workspace/target/dependency /app/libs
 
 ENV JAVA_OPTS=""
-ENV MAIN_CLASS="com.tms.thesissystem.ThesisSystemApplication"
+ENV MAIN_CLASS="com.tms.thesissystem.microservices.gateway.ApiGatewayApplication"
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -cp /app/classes:/app/libs/* $MAIN_CLASS"]

@@ -2,8 +2,8 @@ package com.tms.thesissystem.infrastructure.events;
 
 import com.tms.thesissystem.application.event.WorkflowEvent;
 import com.tms.thesissystem.application.port.WorkflowRepository;
-import com.tms.thesissystem.domain.model.AuditEntry;
-import com.tms.thesissystem.domain.model.Notification;
+import com.tms.thesissystem.domain.AuditEntry;
+import com.tms.thesissystem.domain.Notification;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

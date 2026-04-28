@@ -73,3 +73,15 @@ CREATE TABLE IF NOT EXISTS plan_response (
     res TEXT NOT NULL,
     res_date DATE
 );
+
+CREATE SEQUENCE IF NOT EXISTS auth_account_user_id_seq START WITH 1 INCREMENT BY 1;
+
+CREATE TABLE IF NOT EXISTS auth_account (
+    user_id BIGINT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'student',
+    display_name TEXT,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);

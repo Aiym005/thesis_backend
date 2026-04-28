@@ -35,15 +35,12 @@ services:
       dockerfile: Dockerfile
     environment:
       MAIN_CLASS: com.tms.thesissystem.microservices.user.UserServiceApplication
-      APP_DATABASE_HOST: postgres
+      APP_DATABASE_HOST: host.docker.internal
       APP_DATABASE_PORT: 5432
       APP_DATABASE_NAME: thesisdb
       APP_DATABASE_USERNAME: aiymserjan
       APP_DATABASE_PASSWORD: Aiym0404
-      APP_DATABASE_URL: jdbc:postgresql://postgres:5432/thesisdb
-    depends_on:
-      postgres:
-        condition: service_healthy
+      APP_DATABASE_URL: jdbc:postgresql://host.docker.internal:5432/thesisdb
     ports:
       - "8081:8081"
 
@@ -53,12 +50,12 @@ services:
       dockerfile: Dockerfile
     environment:
       MAIN_CLASS: com.tms.thesissystem.microservices.workflow.WorkflowServiceApplication
-      APP_DATABASE_HOST: postgres
+      APP_DATABASE_HOST: host.docker.internal
       APP_DATABASE_PORT: 5432
       APP_DATABASE_NAME: thesisdb
       APP_DATABASE_USERNAME: aiymserjan
       APP_DATABASE_PASSWORD: Aiym0404
-      APP_DATABASE_URL: jdbc:postgresql://postgres:5432/thesisdb
+      APP_DATABASE_URL: jdbc:postgresql://host.docker.internal:5432/thesisdb
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: guest
@@ -66,8 +63,6 @@ services:
       APP_MESSAGING_RABBIT_ENABLED: "true"
       APP_MESSAGING_RABBIT_EXCHANGE: thesis.workflow.exchange
     depends_on:
-      postgres:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     ports:
@@ -79,12 +74,12 @@ services:
       dockerfile: Dockerfile
     environment:
       MAIN_CLASS: com.tms.thesissystem.microservices.notification.NotificationServiceApplication
-      APP_DATABASE_HOST: postgres
+      APP_DATABASE_HOST: host.docker.internal
       APP_DATABASE_PORT: 5432
       APP_DATABASE_NAME: thesisdb
       APP_DATABASE_USERNAME: aiymserjan
       APP_DATABASE_PASSWORD: Aiym0404
-      APP_DATABASE_URL: jdbc:postgresql://postgres:5432/thesisdb
+      APP_DATABASE_URL: jdbc:postgresql://host.docker.internal:5432/thesisdb
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: guest
@@ -92,8 +87,6 @@ services:
       APP_MESSAGING_RABBIT_ENABLED: "true"
       APP_MESSAGING_RABBIT_EXCHANGE: thesis.workflow.exchange
     depends_on:
-      postgres:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     ports:
@@ -105,12 +98,12 @@ services:
       dockerfile: Dockerfile
     environment:
       MAIN_CLASS: com.tms.thesissystem.microservices.audit.AuditServiceApplication
-      APP_DATABASE_HOST: postgres
+      APP_DATABASE_HOST: host.docker.internal
       APP_DATABASE_PORT: 5432
       APP_DATABASE_NAME: thesisdb
       APP_DATABASE_USERNAME: aiymserjan
       APP_DATABASE_PASSWORD: Aiym0404
-      APP_DATABASE_URL: jdbc:postgresql://postgres:5432/thesisdb
+      APP_DATABASE_URL: jdbc:postgresql://host.docker.internal:5432/thesisdb
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: guest
@@ -118,8 +111,6 @@ services:
       APP_MESSAGING_RABBIT_ENABLED: "true"
       APP_MESSAGING_RABBIT_EXCHANGE: thesis.workflow.exchange
     depends_on:
-      postgres:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     ports:

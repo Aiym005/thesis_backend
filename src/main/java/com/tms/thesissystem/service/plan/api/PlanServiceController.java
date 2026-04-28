@@ -4,7 +4,7 @@ import com.tms.thesissystem.api.ApiDtos;
 import com.tms.thesissystem.api.ApiResponseMapper;
 import com.tms.thesissystem.application.service.WorkflowCommandService;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
-import com.tms.thesissystem.domain.model.WeeklyTask;
+import com.tms.thesissystem.domain.WeeklyTask;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;

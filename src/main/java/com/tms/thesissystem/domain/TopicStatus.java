@@ -1,4 +1,4 @@
-package com.tms.thesissystem.domain.model;
+package com.tms.thesissystem.domain;
 
 public enum TopicStatus {
     AVAILABLE,

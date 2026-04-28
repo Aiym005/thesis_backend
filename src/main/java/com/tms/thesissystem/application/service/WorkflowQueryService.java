@@ -1,12 +1,12 @@
 package com.tms.thesissystem.application.service;
 
 import com.tms.thesissystem.application.port.WorkflowRepository;
-import com.tms.thesissystem.domain.model.AuditEntry;
-import com.tms.thesissystem.domain.model.Notification;
-import com.tms.thesissystem.domain.model.Plan;
-import com.tms.thesissystem.domain.model.Review;
-import com.tms.thesissystem.domain.model.Topic;
-import com.tms.thesissystem.domain.model.User;
+import com.tms.thesissystem.domain.AuditEntry;
+import com.tms.thesissystem.domain.Notification;
+import com.tms.thesissystem.domain.Plan;
+import com.tms.thesissystem.domain.Review;
+import com.tms.thesissystem.domain.Topic;
+import com.tms.thesissystem.domain.User;
 import org.springframework.stereotype.Service;
 
 import java.util.List;

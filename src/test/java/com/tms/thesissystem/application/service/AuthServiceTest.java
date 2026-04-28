@@ -1,6 +1,9 @@
 package com.tms.thesissystem.application.service;
 
+import com.tms.thesissystem.application.port.WorkflowRepository;
 import com.tms.thesissystem.api.ApiDtos;
+import com.tms.thesissystem.domain.User;
+import com.tms.thesissystem.domain.UserRole;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -14,9 +17,9 @@ import static org.mockito.Mockito.when;
 
 class AuthServiceTest {
 
-    private final WorkflowQueryService queryService = mock(WorkflowQueryService.class);
+    private final WorkflowRepository workflowRepository = mock(WorkflowRepository.class);
     private final AuthAccountStore authAccountStore = mock(AuthAccountStore.class);
-    private final AuthService authService = new AuthService(queryService, authAccountStore);
+    private final AuthService authService = new AuthService(workflowRepository, authAccountStore);
 
     @Test
     void returnsValidationMessageWhenCredentialsBlank() {
@@ -83,7 +86,8 @@ class AuthServiceTest {
     @Test
     void registersUserDirectlyIntoAuthStore() {
         when(authAccountStore.findByUsername("new-user")).thenReturn(Optional.empty());
-        when(authAccountStore.nextUserId()).thenReturn(900001L);
+        when(workflowRepository.createUserAccount("new-user", UserRole.STUDENT))
+                .thenReturn(new User(900001L, UserRole.STUDENT, "new-user", "new-user", "User", "new-user@tms.mn", "Software Engineering", "B.SE"));
 
         ApiDtos.RegistrationResponse response = authService.register("new-user", "secret1", "secret1");
 

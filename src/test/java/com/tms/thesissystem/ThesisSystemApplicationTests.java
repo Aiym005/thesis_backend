@@ -2,13 +2,12 @@ package com.tms.thesissystem;
 
 import com.tms.thesissystem.api.ApiDtos;
 import com.tms.thesissystem.api.AuthController;
-import com.tms.thesissystem.api.SystemController;
 import com.tms.thesissystem.api.WorkflowController;
 import com.tms.thesissystem.api.WorkflowVerificationController;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
-import com.tms.thesissystem.domain.model.PlanStatus;
-import com.tms.thesissystem.domain.model.TopicStatus;
-import com.tms.thesissystem.domain.model.UserRole;
+import com.tms.thesissystem.domain.PlanStatus;
+import com.tms.thesissystem.domain.TopicStatus;
+import com.tms.thesissystem.domain.UserRole;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,9 +30,6 @@ class ThesisSystemApplicationTests {
     private WorkflowQueryService workflowQueryService;
 
     @Autowired
-    private SystemController systemController;
-
-    @Autowired
     private WorkflowVerificationController workflowVerificationController;
 
     @Autowired
@@ -43,8 +39,8 @@ class ThesisSystemApplicationTests {
     void dashboardLoads() {
         ApiDtos.DashboardResponse snapshot = workflowController.dashboard();
         assertNotNull(snapshot);
-        assertFalse(snapshot.users().isEmpty());
-        assertFalse(snapshot.topics().isEmpty());
+        assertEquals(4, snapshot.users().size());
+        assertEquals(3, snapshot.topics().size());
     }
 
     @Test
@@ -62,51 +58,60 @@ class ThesisSystemApplicationTests {
     }
 
     @Test
-    void databaseStatusEndpointExists() {
-        assertNotNull(systemController.databaseStatus());
-    }
+    void registerAndLoginWorkForStudent() {
+        String username = uniqueUsername("student");
+        authController.register(new AuthController.RegistrationRequest(username, "123456", "123456"));
 
-    @Test
-    void loginWorksWithUsernameAndPassword() {
-        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest("22b1num0027", "123456"));
+        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest(username, "123456"));
         assertNotNull(response);
-        assertEquals(true, response.ok());
+        assertTrue(response.ok());
         assertNotNull(response.user());
         assertEquals("student", response.user().role());
-        assertEquals("22b1num0027", response.user().username());
+        assertEquals(username, response.user().username());
     }
 
     @Test
-    void loginWorksWithTeacherCode() {
-        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest("tch002", "123456"));
+    void registerAndLoginWorkForTeacher() {
+        String username = uniqueTeacherUsername();
+        authController.register(new AuthController.RegistrationRequest(username, "123456", "123456"));
+
+        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest(username, "123456"));
         assertNotNull(response);
         assertTrue(response.ok());
         assertNotNull(response.user());
         assertEquals("teacher", response.user().role());
+        assertEquals(username, response.user().username());
     }
 
     @Test
-    void loginWorksWithDepartmentAliasUsername() {
-        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest("se-dept", "123456"));
+    void registerAndLoginWorkForDepartment() {
+        String username = uniqueUsername("dept");
+        authController.register(new AuthController.RegistrationRequest(username, "123456", "123456"));
+
+        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest(username, "123456"));
         assertNotNull(response);
         assertTrue(response.ok());
         assertNotNull(response.user());
         assertEquals("department", response.user().role());
+        assertEquals(username, response.user().username());
     }
 
     @Test
-    void seededUsersContainExpectedMinimumUsersPerRole() {
+    void fixtureContainsExpectedUsersPerRole() {
         ApiDtos.DashboardResponse snapshot = workflowController.dashboard();
-        assertEquals(100, snapshot.users().stream().filter(user -> "STUDENT".equals(user.role())).count());
-        assertEquals(20, snapshot.users().stream().filter(user -> "TEACHER".equals(user.role())).count());
+        assertEquals(1, snapshot.users().stream().filter(user -> "STUDENT".equals(user.role())).count());
+        assertEquals(2, snapshot.users().stream().filter(user -> "TEACHER".equals(user.role())).count());
         assertEquals(1, snapshot.users().stream().filter(user -> "DEPARTMENT".equals(user.role())).count());
     }
 
     @Test
-    void forgotPasswordReturnsTemporaryPasswordForKnownUser() {
-        ApiDtos.PasswordResetResponse response = authController.forgotPassword(new AuthController.ForgotPasswordRequest("22b1num0027"));
+    void forgotPasswordReturnsTemporaryPasswordForRegisteredUser() {
+        String username = uniqueUsername("student");
+        authController.register(new AuthController.RegistrationRequest(username, "123456", "123456"));
+
+        ApiDtos.PasswordResetResponse response = authController.forgotPassword(new AuthController.ForgotPasswordRequest(username));
         assertTrue(response.ok());
-        assertEquals("22b1num0027", response.username());
+        assertEquals(username, response.username());
     }
 
     @Test
@@ -116,7 +121,7 @@ class ThesisSystemApplicationTests {
                 .filter(topic -> "TEACHER".equals(topic.proposerRole()))
                 .filter(topic -> "APPROVED".equals(topic.status()))
                 .count();
-        assertTrue(readyTopicCount >= 3);
+        assertEquals(2, readyTopicCount);
     }
 
     @Test
@@ -762,5 +767,13 @@ class ThesisSystemApplicationTests {
                         new WorkflowVerificationController.PlanApprovalRequest(planId, null, nonAdvisorTeacherId, null, true, "Not advisor")
                 )
         );
+    }
+
+    private String uniqueUsername(String prefix) {
+        return prefix + "-" + System.nanoTime();
+    }
+
+    private String uniqueTeacherUsername() {
+        return "teacher-" + System.nanoTime() + "@tms.mn";
     }
 }

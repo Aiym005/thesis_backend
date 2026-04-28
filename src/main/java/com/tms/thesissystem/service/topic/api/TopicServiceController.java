@@ -4,7 +4,8 @@ import com.tms.thesissystem.api.ApiDtos;
 import com.tms.thesissystem.api.ApiResponseMapper;
 import com.tms.thesissystem.application.service.WorkflowCommandService;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
-import com.tms.thesissystem.domain.model.TopicStatus;
+import com.tms.thesissystem.domain.TopicStatus;
+import com.tms.thesissystem.domain.UserRole;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -154,7 +155,7 @@ public class TopicServiceController {
     public record DepartmentTopicUpdateRequest(Long topicId, Long departmentId, String title, String description, String program) {
     }
 
-    public record TopicDeleteRequest(Long topicId, Long actorId, com.tms.thesissystem.domain.model.UserRole actorRole) {
+    public record TopicDeleteRequest(Long topicId, Long actorId, UserRole actorRole) {
     }
 
     public record TopicClaimRequest(Long topicId, Long studentId) {

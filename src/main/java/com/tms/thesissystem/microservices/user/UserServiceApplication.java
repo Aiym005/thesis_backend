@@ -3,10 +3,9 @@ package com.tms.thesissystem.microservices.user;
 import com.tms.thesissystem.api.ApiResponseMapper;
 import com.tms.thesissystem.application.service.AuthService;
 import com.tms.thesissystem.application.service.DatabaseStatusService;
-import com.tms.thesissystem.application.service.WorkflowAsyncService;
 import com.tms.thesissystem.application.service.WorkflowCommandService;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
-import com.tms.thesissystem.infrastructure.repository.InMemoryWorkflowRepository;
+import com.tms.thesissystem.infrastructure.repository.PostgresWorkflowRepository;
 import com.tms.thesissystem.service.user.api.UserServiceController;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -19,12 +18,11 @@ import org.springframework.context.annotation.FilterType;
         UserServiceController.class,
         AuthService.class,
         WorkflowQueryService.class,
-        InMemoryWorkflowRepository.class
+        PostgresWorkflowRepository.class
 }, excludeFilters = @ComponentScan.Filter(
         type = FilterType.ASSIGNABLE_TYPE,
         classes = {
                 WorkflowCommandService.class,
-                WorkflowAsyncService.class,
                 DatabaseStatusService.class
         }
 ))

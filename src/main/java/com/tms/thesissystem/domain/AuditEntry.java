@@ -1,4 +1,4 @@
-package com.tms.thesissystem.domain.model;
+package com.tms.thesissystem.domain;
 
 import java.time.LocalDateTime;
 

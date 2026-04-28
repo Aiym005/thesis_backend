@@ -90,6 +90,8 @@ public final class ApiDtos {
 
     public record LoginResponse(boolean ok, String message, AuthUserDto user) { }
 
+    public record SessionResponse(boolean authenticated, AuthUserDto user) { }
+
     public record RegistrationResponse(boolean ok, String message, String username) { }
 
     public record PasswordResetResponse(boolean ok, String message, String username) { }

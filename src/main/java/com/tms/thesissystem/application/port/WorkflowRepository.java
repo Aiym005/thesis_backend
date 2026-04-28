@@ -1,12 +1,12 @@
 package com.tms.thesissystem.application.port;
 
-import com.tms.thesissystem.domain.model.AuditEntry;
-import com.tms.thesissystem.domain.model.Notification;
-import com.tms.thesissystem.domain.model.Plan;
-import com.tms.thesissystem.domain.model.Review;
-import com.tms.thesissystem.domain.model.Topic;
-import com.tms.thesissystem.domain.model.User;
-import com.tms.thesissystem.domain.model.UserRole;
+import com.tms.thesissystem.domain.AuditEntry;
+import com.tms.thesissystem.domain.Notification;
+import com.tms.thesissystem.domain.Plan;
+import com.tms.thesissystem.domain.Review;
+import com.tms.thesissystem.domain.Topic;
+import com.tms.thesissystem.domain.User;
+import com.tms.thesissystem.domain.UserRole;
 
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +15,7 @@ public interface WorkflowRepository {
     List<User> findAllUsers();
     List<User> findUsersByRole(UserRole role);
     Optional<User> findUserById(Long id);
+    User createUserAccount(String username, UserRole role);
     Long nextTopicId();
     List<Topic> findAllTopics();
     Optional<Topic> findTopicById(Long id);

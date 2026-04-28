@@ -5,7 +5,8 @@ import com.tms.thesissystem.api.ApiResponseMapper;
 import com.tms.thesissystem.application.service.DatabaseStatusService;
 import com.tms.thesissystem.application.service.WorkflowCommandService;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
-import com.tms.thesissystem.domain.model.WeeklyTask;
+import com.tms.thesissystem.domain.UserRole;
+import com.tms.thesissystem.domain.WeeklyTask;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -171,7 +172,7 @@ public class WorkflowCompatibilityController {
     public record DepartmentTopicUpdateRequest(Long topicId, Long departmentId, String title, String description, String program) {
     }
 
-    public record TopicDeleteRequest(Long topicId, Long actorId, com.tms.thesissystem.domain.model.UserRole actorRole) {
+    public record TopicDeleteRequest(Long topicId, Long actorId, UserRole actorRole) {
     }
 
     public record TopicTeacherApprovalRequest(Long topicId, Long entityId, Long teacherId, Long actorId, boolean approved, String note) {
