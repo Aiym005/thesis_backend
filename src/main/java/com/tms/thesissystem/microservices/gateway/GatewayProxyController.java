@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.io.IOException;
 import java.net.URI;
@@ -29,6 +31,7 @@ import java.util.Map;
 @RestController
 public class GatewayProxyController {
     private static final String SESSION_AUTH_USER = "auth.user";
+    private static final String SESSION_AUTH_TOKEN = "auth.token";
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final String userServiceBaseUrl;
@@ -62,15 +65,20 @@ public class GatewayProxyController {
     }
 
     @GetMapping("/api/dashboard")
-    public ResponseEntity<String> dashboard() throws IOException, InterruptedException {
-        HttpResponse<String> workflowResponse = send(HttpMethod.GET, workflowServiceBaseUrl + "/api/dashboard", null);
+    public ResponseEntity<String> dashboard(HttpServletRequest request) throws IOException, InterruptedException {
+        String token = sessionToken(request);
+        HttpResponse<String> workflowResponse = send(HttpMethod.GET, workflowServiceBaseUrl + "/api/dashboard", null, token);
         if (workflowResponse.statusCode() >= 400) {
             return jsonResponse(workflowResponse.statusCode(), workflowResponse.body());
         }
 
         ObjectNode dashboard = (ObjectNode) objectMapper.readTree(workflowResponse.body());
-        dashboard.set("notifications", readArrayOrEmpty(notificationServiceBaseUrl + "/api/notifications"));
-        dashboard.set("auditTrail", readArrayOrEmpty(auditServiceBaseUrl + "/api/audits"));
+        ArrayNode workflowNotifications = readArrayFieldOrEmpty(dashboard, "notifications");
+        ArrayNode workflowAuditTrail = readArrayFieldOrEmpty(dashboard, "auditTrail");
+        ArrayNode notifications = readArrayOrEmpty(notificationServiceBaseUrl + "/api/notifications", token);
+        ArrayNode auditTrail = readArrayOrEmpty(auditServiceBaseUrl + "/api/audits", token);
+        dashboard.set("notifications", notifications.isEmpty() ? workflowNotifications : notifications);
+        dashboard.set("auditTrail", auditTrail.isEmpty() ? workflowAuditTrail : auditTrail);
         return jsonResponse(workflowResponse.statusCode(), objectMapper.writeValueAsString(dashboard));
     }
 
@@ -202,14 +210,31 @@ public class GatewayProxyController {
             if (existingSession != null) {
                 existingSession.invalidate();
             }
-            request.getSession(true).setAttribute(SESSION_AUTH_USER, loginResponse.user());
+            HttpSession session = request.getSession(true);
+            session.setAttribute(SESSION_AUTH_USER, loginResponse.user());
+            session.setAttribute(SESSION_AUTH_TOKEN, loginResponse.token());
         }
         return jsonResponse(response.statusCode(), response.body());
     }
 
     @PostMapping("/api/auth/register")
-    public ResponseEntity<String> register(@RequestBody String payload) throws IOException, InterruptedException {
-        return proxy(HttpMethod.POST, userServiceBaseUrl + "/api/users/register", payload);
+    public ResponseEntity<String> register(@RequestBody String payload, HttpServletRequest request) throws IOException, InterruptedException {
+        HttpResponse<String> response = send(HttpMethod.POST, userServiceBaseUrl + "/api/users/register", payload);
+        if (response.statusCode() >= 400) {
+            return jsonResponse(response.statusCode(), response.body());
+        }
+
+        ApiDtos.RegistrationResponse registrationResponse = objectMapper.readValue(response.body(), ApiDtos.RegistrationResponse.class);
+        if (registrationResponse.user() != null) {
+            HttpSession existingSession = request.getSession(false);
+            if (existingSession != null) {
+                existingSession.invalidate();
+            }
+            HttpSession session = request.getSession(true);
+            session.setAttribute(SESSION_AUTH_USER, registrationResponse.user());
+            session.setAttribute(SESSION_AUTH_TOKEN, registrationResponse.token());
+        }
+        return jsonResponse(response.statusCode(), response.body());
     }
 
     @PostMapping("/api/auth/forgot-password")
@@ -221,10 +246,11 @@ public class GatewayProxyController {
     public ResponseEntity<String> session(HttpServletRequest request) throws IOException {
         HttpSession session = request.getSession(false);
         Object sessionUser = session == null ? null : session.getAttribute(SESSION_AUTH_USER);
+        Object sessionToken = session == null ? null : session.getAttribute(SESSION_AUTH_TOKEN);
         if (!(sessionUser instanceof ApiDtos.AuthUserDto authUser)) {
-            return jsonResponse(200, objectMapper.writeValueAsString(new ApiDtos.SessionResponse(false, null)));
+            return jsonResponse(200, objectMapper.writeValueAsString(new ApiDtos.SessionResponse(false, null, null)));
         }
-        return jsonResponse(200, objectMapper.writeValueAsString(new ApiDtos.SessionResponse(true, authUser)));
+        return jsonResponse(200, objectMapper.writeValueAsString(new ApiDtos.SessionResponse(true, authUser, sessionToken instanceof String token ? token : null)));
     }
 
     @PostMapping("/api/auth/logout")
@@ -239,8 +265,19 @@ public class GatewayProxyController {
     }
 
     @GetMapping("/api/users")
-    public ResponseEntity<String> users() throws IOException, InterruptedException {
-        return proxy(HttpMethod.GET, userServiceBaseUrl + "/api/users", null);
+    public ResponseEntity<String> users(HttpServletRequest request) throws IOException, InterruptedException {
+        HttpSession session = request.getSession(false);
+        String token = session == null ? null : (String) session.getAttribute(SESSION_AUTH_TOKEN);
+        HttpResponse<String> response = send(HttpMethod.GET, userServiceBaseUrl + "/api/users", null, token);
+        return jsonResponse(response.statusCode(), response.body());
+    }
+
+    @GetMapping("/api/users/login-enabled-teachers")
+    public ResponseEntity<String> loginEnabledTeachers(HttpServletRequest request) throws IOException, InterruptedException {
+        HttpSession session = request.getSession(false);
+        String token = session == null ? null : (String) session.getAttribute(SESSION_AUTH_TOKEN);
+        HttpResponse<String> response = send(HttpMethod.GET, userServiceBaseUrl + "/api/users/login-enabled-teachers", null, token);
+        return jsonResponse(response.statusCode(), response.body());
     }
 
     @GetMapping("/api/topics")
@@ -259,14 +296,21 @@ public class GatewayProxyController {
     }
 
     private ResponseEntity<String> proxy(HttpMethod method, String url, String body) throws IOException, InterruptedException {
-        HttpResponse<String> response = send(method, url, body);
+        HttpResponse<String> response = send(method, url, body, currentSessionToken());
         return jsonResponse(response.statusCode(), response.body());
     }
 
     private HttpResponse<String> send(HttpMethod method, String url, String body) throws IOException, InterruptedException {
+        return send(method, url, body, null);
+    }
+
+    private HttpResponse<String> send(HttpMethod method, String url, String body, String bearerToken) throws IOException, InterruptedException {
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
                 .timeout(Duration.ofSeconds(10))
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+        if (bearerToken != null && !bearerToken.isBlank()) {
+            builder.header(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken);
+        }
 
         if (method == HttpMethod.POST) {
             builder.POST(HttpRequest.BodyPublishers.ofString(body == null ? "" : body));
@@ -277,9 +321,9 @@ public class GatewayProxyController {
         return httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    private ArrayNode readArrayOrEmpty(String url) {
+    private ArrayNode readArrayOrEmpty(String url, String bearerToken) {
         try {
-            HttpResponse<String> response = send(HttpMethod.GET, url, null);
+            HttpResponse<String> response = send(HttpMethod.GET, url, null, bearerToken);
             if (response.statusCode() >= 400) {
                 return objectMapper.createArrayNode();
             }
@@ -294,9 +338,25 @@ public class GatewayProxyController {
         }
     }
 
+    private ArrayNode readArrayFieldOrEmpty(ObjectNode payload, String fieldName) {
+        JsonNode node = payload.get(fieldName);
+        return node != null && node.isArray() ? (ArrayNode) node : objectMapper.createArrayNode();
+    }
+
     private ResponseEntity<String> jsonResponse(int statusCode, String body) {
         return ResponseEntity.status(statusCode)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body);
+    }
+
+    private String currentSessionToken() {
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        return attributes == null ? null : sessionToken(attributes.getRequest());
+    }
+
+    private String sessionToken(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        Object token = session == null ? null : session.getAttribute(SESSION_AUTH_TOKEN);
+        return token instanceof String value && !value.isBlank() ? value : null;
     }
 }

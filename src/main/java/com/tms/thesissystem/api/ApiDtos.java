@@ -1,12 +1,12 @@
 package com.tms.thesissystem.api;
 
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
+@NoArgsConstructor
 public final class ApiDtos {
-    private ApiDtos() {
-    }
-
     public record DashboardResponse(
             List<UserDto> users,
             List<TopicDto> topics,
@@ -88,11 +88,13 @@ public final class ApiDtos {
 
     public record AuthUserDto(Long id, String username, String displayName, String role) { }
 
-    public record LoginResponse(boolean ok, String message, AuthUserDto user) { }
+    public record LoginResponse(boolean ok, String message, AuthUserDto user, String token) { }
 
-    public record SessionResponse(boolean authenticated, AuthUserDto user) { }
+    public record SessionResponse(boolean authenticated, AuthUserDto user, String token) { }
 
-    public record RegistrationResponse(boolean ok, String message, String username) { }
+    public record RegistrationResponse(boolean ok, String message, String username, AuthUserDto user, String token) { }
 
-    public record PasswordResetResponse(boolean ok, String message, String username) { }
+    public record PasswordResetResponse(boolean ok, String message, String username, String resetToken) { }
+
+    public record ApiErrorResponse(String message) { }
 }

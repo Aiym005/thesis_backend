@@ -46,16 +46,13 @@ public class ReviewServiceController {
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiErrorResponse handleDomainError(RuntimeException exception) {
-        return new ApiErrorResponse(exception.getMessage());
+    public ApiDtos.ApiErrorResponse handleDomainError(RuntimeException exception) {
+        return new ApiDtos.ApiErrorResponse(exception.getMessage());
     }
 
     public record ReviewRequest(Long planId, Long reviewerId, int week, int score, String comment) {
     }
 
     public record ReviewSubmissionResponse(ApiDtos.ReviewDto review, ApiDtos.WorkflowStateResponse state) {
-    }
-
-    public record ApiErrorResponse(String message) {
     }
 }

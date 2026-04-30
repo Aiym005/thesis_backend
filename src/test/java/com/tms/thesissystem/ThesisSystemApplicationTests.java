@@ -1,13 +1,12 @@
 package com.tms.thesissystem;
 
 import com.tms.thesissystem.api.ApiDtos;
-import com.tms.thesissystem.api.AuthController;
-import com.tms.thesissystem.api.WorkflowController;
-import com.tms.thesissystem.api.WorkflowVerificationController;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
 import com.tms.thesissystem.domain.PlanStatus;
 import com.tms.thesissystem.domain.TopicStatus;
 import com.tms.thesissystem.domain.UserRole;
+import com.tms.thesissystem.microservices.workflow.WorkflowCompatibilityController;
+import com.tms.thesissystem.service.user.api.UserServiceController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,21 +18,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-@SpringBootTest
+@SpringBootTest(classes = TestApplication.class)
 @Import(TestWorkflowRepositoryConfig.class)
 class ThesisSystemApplicationTests {
 
     @Autowired
-    private WorkflowController workflowController;
+    private WorkflowCompatibilityController workflowController;
 
     @Autowired
     private WorkflowQueryService workflowQueryService;
 
     @Autowired
-    private WorkflowVerificationController workflowVerificationController;
+    private WorkflowCompatibilityController workflowVerificationController;
 
     @Autowired
-    private AuthController authController;
+    private UserServiceController authController;
 
     @Test
     void dashboardLoads() {
@@ -50,8 +49,8 @@ class ThesisSystemApplicationTests {
                 .findFirst()
                 .orElseThrow()
                 .id();
-        ApiDtos.DashboardResponse snapshot = workflowController.proposeTopic(
-                new WorkflowController.TopicProposalRequest(studentId, "Distributed Thesis Governance", "Workflow orchestration", "B.SE")
+        ApiDtos.DashboardResponse snapshot = workflowController.studentProposesTopic(
+                new WorkflowCompatibilityController.StudentTopicProposalRequest(studentId, "Distributed Thesis Governance", "Workflow orchestration", "B.SE")
         );
         assertNotNull(snapshot);
         assertFalse(snapshot.topics().isEmpty());
@@ -60,9 +59,9 @@ class ThesisSystemApplicationTests {
     @Test
     void registerAndLoginWorkForStudent() {
         String username = uniqueUsername("student");
-        authController.register(new AuthController.RegistrationRequest(username, "123456", "123456"));
+        authController.register(new UserServiceController.RegistrationRequest(username, "123456", "123456"));
 
-        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest(username, "123456"));
+        ApiDtos.LoginResponse response = authController.login(new UserServiceController.LoginRequest(username, "123456"));
         assertNotNull(response);
         assertTrue(response.ok());
         assertNotNull(response.user());
@@ -73,9 +72,9 @@ class ThesisSystemApplicationTests {
     @Test
     void registerAndLoginWorkForTeacher() {
         String username = uniqueTeacherUsername();
-        authController.register(new AuthController.RegistrationRequest(username, "123456", "123456"));
+        authController.register(new UserServiceController.RegistrationRequest(username, "123456", "123456"));
 
-        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest(username, "123456"));
+        ApiDtos.LoginResponse response = authController.login(new UserServiceController.LoginRequest(username, "123456"));
         assertNotNull(response);
         assertTrue(response.ok());
         assertNotNull(response.user());
@@ -86,9 +85,9 @@ class ThesisSystemApplicationTests {
     @Test
     void registerAndLoginWorkForDepartment() {
         String username = uniqueUsername("dept");
-        authController.register(new AuthController.RegistrationRequest(username, "123456", "123456"));
+        authController.register(new UserServiceController.RegistrationRequest(username, "123456", "123456"));
 
-        ApiDtos.LoginResponse response = authController.login(new AuthController.LoginRequest(username, "123456"));
+        ApiDtos.LoginResponse response = authController.login(new UserServiceController.LoginRequest(username, "123456"));
         assertNotNull(response);
         assertTrue(response.ok());
         assertNotNull(response.user());
@@ -107,16 +106,16 @@ class ThesisSystemApplicationTests {
     @Test
     void forgotPasswordReturnsTemporaryPasswordForRegisteredUser() {
         String username = uniqueUsername("student");
-        authController.register(new AuthController.RegistrationRequest(username, "123456", "123456"));
+        authController.register(new UserServiceController.RegistrationRequest(username, "123456", "123456"));
 
-        ApiDtos.PasswordResetResponse response = authController.forgotPassword(new AuthController.ForgotPasswordRequest(username));
+        ApiDtos.PasswordResetResponse response = authController.forgotPassword(new UserServiceController.ForgotPasswordRequest(username));
         assertTrue(response.ok());
         assertEquals(username, response.username());
     }
 
     @Test
     void studentCanSeeReadyApprovedTopicsInCatalog() {
-        ApiDtos.DashboardResponse snapshot = workflowVerificationController.state();
+        ApiDtos.DashboardResponse snapshot = workflowVerificationController.verificationState();
         long readyTopicCount = snapshot.topics().stream()
                 .filter(topic -> "TEACHER".equals(topic.proposerRole()))
                 .filter(topic -> "APPROVED".equals(topic.status()))
@@ -126,7 +125,7 @@ class ThesisSystemApplicationTests {
 
     @Test
     void verificationControllerExposesDbBackedWorkflowState() {
-        ApiDtos.DashboardResponse state = workflowVerificationController.state();
+        ApiDtos.DashboardResponse state = workflowVerificationController.verificationState();
         assertNotNull(state);
         assertFalse(state.users().isEmpty());
         assertFalse(state.topics().isEmpty());
@@ -141,8 +140,8 @@ class ThesisSystemApplicationTests {
         Long departmentId = initial.users().stream().filter(user -> user.role() == UserRole.DEPARTMENT).findFirst().orElseThrow().id();
         Long secondTeacherId = initial.users().stream().filter(user -> user.role() == UserRole.TEACHER).skip(1).findFirst().orElseThrow().id();
 
-        Long availableTopicId = workflowController.createTeacherTopic(
-                new WorkflowController.TeacherTopicRequest(
+        Long availableTopicId = workflowController.teacherProposesTopic(
+                new WorkflowCompatibilityController.TeacherTopicProposalRequest(
                         teacherId,
                         "Regression Flow Catalog Topic",
                         "Catalog topic for end-to-end approval flow.",
@@ -154,30 +153,30 @@ class ThesisSystemApplicationTests {
                 .map(topic -> topic.id())
                 .orElseThrow();
 
-        workflowController.departmentTopicDecision(
-                new WorkflowController.DepartmentTopicDecisionRequest(availableTopicId, departmentId, true, null, "Catalog ready")
+        workflowController.departmentApprovesTopic(
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(availableTopicId, departmentId, true, null, "Catalog ready")
         );
 
-        ApiDtos.DashboardResponse afterClaim = workflowController.claimTopic(
-                new WorkflowController.TopicClaimRequest(availableTopicId, studentId)
+        ApiDtos.DashboardResponse afterClaim = workflowController.studentSelectsTopic(
+                new WorkflowCompatibilityController.TopicSelectionRequest(availableTopicId, studentId)
         );
         assertNotNull(afterClaim);
 
-        ApiDtos.DashboardResponse afterTeacherTopicApproval = workflowController.teacherTopicDecision(
-                new WorkflowController.DecisionRequest(availableTopicId, teacherId, true, "OK")
+        ApiDtos.DashboardResponse afterTeacherTopicApproval = workflowController.teacherApprovesTopic(
+                new WorkflowCompatibilityController.TopicTeacherApprovalRequest(availableTopicId, null, teacherId, null, true, "OK")
         );
         assertNotNull(afterTeacherTopicApproval);
 
-        ApiDtos.DashboardResponse afterDepartmentTopicApproval = workflowController.departmentTopicDecision(
-                new WorkflowController.DepartmentTopicDecisionRequest(availableTopicId, departmentId, true, secondTeacherId, "Assigned")
+        ApiDtos.DashboardResponse afterDepartmentTopicApproval = workflowController.departmentApprovesTopic(
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(availableTopicId, departmentId, true, secondTeacherId, "Assigned")
         );
         assertNotNull(afterDepartmentTopicApproval);
 
-        WorkflowController.PlanSaveRequest planSaveRequest = new WorkflowController.PlanSaveRequest(
+        WorkflowCompatibilityController.StudentPlanRequest planSaveRequest = new WorkflowCompatibilityController.StudentPlanRequest(
                 studentId,
                 availableTopicId,
                 java.util.stream.IntStream.rangeClosed(1, 15)
-                        .mapToObj(week -> new WorkflowController.WeeklyTaskRequest(
+                        .mapToObj(week -> new WorkflowCompatibilityController.WeeklyTaskRequest(
                                 week,
                                 "Week " + week,
                                 "Deliverable " + week,
@@ -185,7 +184,7 @@ class ThesisSystemApplicationTests {
                         ))
                         .toList()
         );
-        ApiDtos.DashboardResponse afterPlanSave = workflowController.savePlan(planSaveRequest);
+        ApiDtos.DashboardResponse afterPlanSave = workflowController.studentCreatesPlan(planSaveRequest);
         assertNotNull(afterPlanSave);
 
         Long savedPlanId = afterPlanSave.plans().stream()
@@ -194,18 +193,18 @@ class ThesisSystemApplicationTests {
                 .orElseThrow()
                 .id();
 
-        ApiDtos.DashboardResponse afterPlanSubmit = workflowController.submitPlan(
-                new WorkflowController.PlanSubmitRequest(savedPlanId, studentId)
+        ApiDtos.DashboardResponse afterPlanSubmit = workflowController.studentSubmitsPlan(
+                new WorkflowCompatibilityController.PlanSubmitRequest(savedPlanId, studentId)
         );
         assertNotNull(afterPlanSubmit);
 
-        ApiDtos.DashboardResponse afterTeacherPlanApproval = workflowController.teacherPlanDecision(
-                new WorkflowController.DecisionRequest(savedPlanId, secondTeacherId, true, "Plan OK")
+        ApiDtos.DashboardResponse afterTeacherPlanApproval = workflowController.teacherApprovesPlan(
+                new WorkflowCompatibilityController.PlanApprovalRequest(savedPlanId, secondTeacherId, null, null, true, "Plan OK")
         );
         assertNotNull(afterTeacherPlanApproval);
 
-        ApiDtos.DashboardResponse afterDepartmentPlanApproval = workflowController.departmentPlanDecision(
-                new WorkflowController.DecisionRequest(savedPlanId, departmentId, true, "Final OK")
+        ApiDtos.DashboardResponse afterDepartmentPlanApproval = workflowController.departmentApprovesPlan(
+                new WorkflowCompatibilityController.PlanApprovalRequest(savedPlanId, departmentId, null, null, true, "Final OK")
         );
         assertNotNull(afterDepartmentPlanApproval);
 
@@ -219,14 +218,14 @@ class ThesisSystemApplicationTests {
 
     @Test
     void verificationControllerRunsFullTeacherStudentDepartmentWorkflow() {
-        ApiDtos.DashboardResponse initial = workflowVerificationController.state();
+        ApiDtos.DashboardResponse initial = workflowVerificationController.verificationState();
         Long studentId = initial.users().stream().filter(user -> "STUDENT".equals(user.role())).findFirst().orElseThrow().id();
         Long teacherId = initial.users().stream().filter(user -> "TEACHER".equals(user.role())).findFirst().orElseThrow().id();
         Long advisorTeacherId = initial.users().stream().filter(user -> "TEACHER".equals(user.role())).skip(1).findFirst().orElseThrow().id();
         Long departmentId = initial.users().stream().filter(user -> "DEPARTMENT".equals(user.role())).findFirst().orElseThrow().id();
 
         ApiDtos.DashboardResponse teacherTopic = workflowVerificationController.teacherProposesTopic(
-                new WorkflowVerificationController.TeacherTopicProposalRequest(
+                new WorkflowCompatibilityController.TeacherTopicProposalRequest(
                         teacherId,
                         "Department Approved Catalog Topic",
                         "Teacher proposes a topic that department adds to approved catalog.",
@@ -245,7 +244,7 @@ class ThesisSystemApplicationTests {
                 .status());
 
         ApiDtos.DashboardResponse departmentCatalogApproval = workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(
                         teacherTopicId,
                         departmentId,
                         true,
@@ -259,8 +258,8 @@ class ThesisSystemApplicationTests {
                 .orElseThrow()
                 .status());
 
-        ApiDtos.DashboardResponse studentSelection = workflowVerificationController.studentSelectsApprovedTopic(
-                new WorkflowVerificationController.TopicSelectionRequest(teacherTopicId, studentId)
+        ApiDtos.DashboardResponse studentSelection = workflowVerificationController.studentSelectsTopic(
+                new WorkflowCompatibilityController.TopicSelectionRequest(teacherTopicId, studentId)
         );
         assertEquals(TopicStatus.PENDING_TEACHER_APPROVAL.name(), studentSelection.topics().stream()
                 .filter(topic -> topic.id().equals(teacherTopicId))
@@ -269,7 +268,7 @@ class ThesisSystemApplicationTests {
                 .status());
 
         ApiDtos.DashboardResponse teacherApproval = workflowVerificationController.teacherApprovesStudentTopic(
-                new WorkflowVerificationController.TopicTeacherApprovalRequest(
+                new WorkflowCompatibilityController.TopicTeacherApprovalRequest(
                         teacherTopicId,
                         null,
                         teacherId,
@@ -286,7 +285,7 @@ class ThesisSystemApplicationTests {
                 .status());
 
         ApiDtos.DashboardResponse departmentFinalApproval = workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(
                         teacherTopicId,
                         departmentId,
                         true,
@@ -301,11 +300,11 @@ class ThesisSystemApplicationTests {
                 .status());
 
         ApiDtos.DashboardResponse savedPlan = workflowVerificationController.studentCreatesPlan(
-                new WorkflowVerificationController.StudentPlanRequest(
+                new WorkflowCompatibilityController.StudentPlanRequest(
                         studentId,
                         teacherTopicId,
                         java.util.stream.IntStream.rangeClosed(1, 15)
-                                .mapToObj(week -> new WorkflowVerificationController.WeeklyTaskRequest(
+                                .mapToObj(week -> new WorkflowCompatibilityController.WeeklyTaskRequest(
                                         week,
                                         "Week " + week,
                                         "Deliverable " + week,
@@ -326,7 +325,7 @@ class ThesisSystemApplicationTests {
                 .status());
 
         ApiDtos.DashboardResponse submittedPlan = workflowVerificationController.studentSubmitsPlan(
-                new WorkflowVerificationController.PlanSubmitRequest(savedPlanId, studentId)
+                new WorkflowCompatibilityController.PlanSubmitRequest(savedPlanId, studentId)
         );
         assertEquals(PlanStatus.PENDING_TEACHER_APPROVAL.name(), submittedPlan.plans().stream()
                 .filter(plan -> plan.id().equals(savedPlanId))
@@ -335,7 +334,7 @@ class ThesisSystemApplicationTests {
                 .status());
 
         ApiDtos.DashboardResponse teacherPlanApproval = workflowVerificationController.teacherApprovesPlan(
-                new WorkflowVerificationController.PlanApprovalRequest(savedPlanId, null, advisorTeacherId, null, true, "Teacher plan approval")
+                new WorkflowCompatibilityController.PlanApprovalRequest(savedPlanId, null, advisorTeacherId, null, true, "Teacher plan approval")
         );
         assertEquals(PlanStatus.PENDING_DEPARTMENT_APPROVAL.name(), teacherPlanApproval.plans().stream()
                 .filter(plan -> plan.id().equals(savedPlanId))
@@ -344,7 +343,7 @@ class ThesisSystemApplicationTests {
                 .status());
 
         ApiDtos.DashboardResponse departmentPlanApproval = workflowVerificationController.departmentApprovesPlan(
-                new WorkflowVerificationController.PlanApprovalRequest(savedPlanId, null, null, departmentId, true, "Department plan approval")
+                new WorkflowCompatibilityController.PlanApprovalRequest(savedPlanId, null, null, departmentId, true, "Department plan approval")
         );
         assertEquals(PlanStatus.APPROVED.name(), departmentPlanApproval.plans().stream()
                 .filter(plan -> plan.id().equals(savedPlanId))
@@ -355,13 +354,13 @@ class ThesisSystemApplicationTests {
 
     @Test
     void departmentApprovalCanAutoAssignTeacherWhoApprovedTopic() {
-        ApiDtos.DashboardResponse initial = workflowVerificationController.state();
+        ApiDtos.DashboardResponse initial = workflowVerificationController.verificationState();
         Long studentId = initial.users().stream().filter(user -> "STUDENT".equals(user.role())).findFirst().orElseThrow().id();
         Long teacherId = initial.users().stream().filter(user -> "TEACHER".equals(user.role())).findFirst().orElseThrow().id();
         Long departmentId = initial.users().stream().filter(user -> "DEPARTMENT".equals(user.role())).findFirst().orElseThrow().id();
 
         ApiDtos.DashboardResponse proposal = workflowVerificationController.studentProposesTopic(
-                new WorkflowVerificationController.StudentTopicProposalRequest(
+                new WorkflowCompatibilityController.StudentTopicProposalRequest(
                         studentId,
                         "Auto advisor fallback topic",
                         "Department should infer advisor from teacher approval.",
@@ -376,7 +375,7 @@ class ThesisSystemApplicationTests {
                 .id();
 
         workflowVerificationController.teacherApprovesStudentTopic(
-                new WorkflowVerificationController.TopicTeacherApprovalRequest(
+                new WorkflowCompatibilityController.TopicTeacherApprovalRequest(
                         topicId,
                         null,
                         teacherId,
@@ -388,7 +387,7 @@ class ThesisSystemApplicationTests {
         );
 
         ApiDtos.DashboardResponse approved = workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(
                         topicId,
                         departmentId,
                         true,
@@ -408,13 +407,13 @@ class ThesisSystemApplicationTests {
 
     @Test
     void rejectedCatalogTopicReturnsToAvailableAndStudentCanChooseAnother() {
-        ApiDtos.DashboardResponse initial = workflowVerificationController.state();
+        ApiDtos.DashboardResponse initial = workflowVerificationController.verificationState();
         Long studentId = initial.users().stream().filter(user -> "STUDENT".equals(user.role())).findFirst().orElseThrow().id();
         Long teacherId = initial.users().stream().filter(user -> "TEACHER".equals(user.role())).findFirst().orElseThrow().id();
         Long departmentId = initial.users().stream().filter(user -> "DEPARTMENT".equals(user.role())).findFirst().orElseThrow().id();
 
         ApiDtos.DashboardResponse created = workflowVerificationController.teacherProposesTopic(
-                new WorkflowVerificationController.TeacherTopicProposalRequest(
+                new WorkflowCompatibilityController.TeacherTopicProposalRequest(
                         teacherId,
                         "Retryable catalog topic",
                         "Should return to catalog after rejection.",
@@ -428,14 +427,14 @@ class ThesisSystemApplicationTests {
                 .id();
 
         workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(topicId, departmentId, true, null, "Catalog ready")
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(topicId, departmentId, true, null, "Catalog ready")
         );
-        workflowVerificationController.studentSelectsApprovedTopic(
-                new WorkflowVerificationController.TopicSelectionRequest(topicId, studentId)
+        workflowVerificationController.studentSelectsTopic(
+                new WorkflowCompatibilityController.TopicSelectionRequest(topicId, studentId)
         );
 
         ApiDtos.DashboardResponse rejected = workflowVerificationController.teacherApprovesStudentTopic(
-                new WorkflowVerificationController.TopicTeacherApprovalRequest(
+                new WorkflowCompatibilityController.TopicTeacherApprovalRequest(
                         topicId,
                         null,
                         teacherId,
@@ -453,8 +452,8 @@ class ThesisSystemApplicationTests {
         assertEquals("APPROVED", topicAfterRejection.status());
         assertEquals(null, topicAfterRejection.ownerStudentId());
 
-        ApiDtos.DashboardResponse reclaimed = workflowVerificationController.studentSelectsApprovedTopic(
-                new WorkflowVerificationController.TopicSelectionRequest(topicId, studentId)
+        ApiDtos.DashboardResponse reclaimed = workflowVerificationController.studentSelectsTopic(
+                new WorkflowCompatibilityController.TopicSelectionRequest(topicId, studentId)
         );
         assertEquals("PENDING_TEACHER_APPROVAL", reclaimed.topics().stream()
                 .filter(topic -> topic.id().equals(topicId))
@@ -465,13 +464,13 @@ class ThesisSystemApplicationTests {
 
     @Test
     void departmentRejectionCreatesStudentNotification() {
-        ApiDtos.DashboardResponse initial = workflowVerificationController.state();
+        ApiDtos.DashboardResponse initial = workflowVerificationController.verificationState();
         Long studentId = initial.users().stream().filter(user -> "STUDENT".equals(user.role())).findFirst().orElseThrow().id();
         Long teacherId = initial.users().stream().filter(user -> "TEACHER".equals(user.role())).findFirst().orElseThrow().id();
         Long departmentId = initial.users().stream().filter(user -> "DEPARTMENT".equals(user.role())).findFirst().orElseThrow().id();
 
         ApiDtos.DashboardResponse proposal = workflowVerificationController.studentProposesTopic(
-                new WorkflowVerificationController.StudentTopicProposalRequest(
+                new WorkflowCompatibilityController.StudentTopicProposalRequest(
                         studentId,
                         "Department rejection notification topic",
                         "Student should be notified on department rejection.",
@@ -486,7 +485,7 @@ class ThesisSystemApplicationTests {
                 .id();
 
         workflowVerificationController.teacherApprovesStudentTopic(
-                new WorkflowVerificationController.TopicTeacherApprovalRequest(
+                new WorkflowCompatibilityController.TopicTeacherApprovalRequest(
                         topicId,
                         null,
                         teacherId,
@@ -498,7 +497,7 @@ class ThesisSystemApplicationTests {
         );
 
         ApiDtos.DashboardResponse rejected = workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(
                         topicId,
                         departmentId,
                         false,
@@ -513,7 +512,7 @@ class ThesisSystemApplicationTests {
 
     @Test
     void selectedApprovedTopicBecomesStudentsCurrentTopicAfterTeacherAndDepartmentApproval() {
-        ApiDtos.DashboardResponse initial = workflowVerificationController.state();
+        ApiDtos.DashboardResponse initial = workflowVerificationController.verificationState();
         Long studentId = initial.users().stream().filter(user -> "STUDENT".equals(user.role())).skip(2).findFirst().orElseThrow().id();
         Long teacherId = initial.users().stream().filter(user -> "TEACHER".equals(user.role())).findFirst().orElseThrow().id();
         Long departmentId = initial.users().stream().filter(user -> "DEPARTMENT".equals(user.role())).findFirst().orElseThrow().id();
@@ -526,11 +525,11 @@ class ThesisSystemApplicationTests {
                 .orElseThrow()
                 .id();
 
-        workflowVerificationController.studentSelectsApprovedTopic(
-                new WorkflowVerificationController.TopicSelectionRequest(topicId, studentId)
+        workflowVerificationController.studentSelectsTopic(
+                new WorkflowCompatibilityController.TopicSelectionRequest(topicId, studentId)
         );
         workflowVerificationController.teacherApprovesStudentTopic(
-                new WorkflowVerificationController.TopicTeacherApprovalRequest(
+                new WorkflowCompatibilityController.TopicTeacherApprovalRequest(
                         topicId,
                         null,
                         teacherId,
@@ -541,7 +540,7 @@ class ThesisSystemApplicationTests {
                 )
         );
         ApiDtos.DashboardResponse approved = workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(
                         topicId,
                         departmentId,
                         true,
@@ -561,7 +560,7 @@ class ThesisSystemApplicationTests {
 
     @Test
     void newlyApprovedTopicSupersedesPreviousApprovedTopicForStudent() {
-        ApiDtos.DashboardResponse initial = workflowVerificationController.state();
+        ApiDtos.DashboardResponse initial = workflowVerificationController.verificationState();
         Long studentId = initial.users().stream().filter(user -> "STUDENT".equals(user.role())).skip(1).findFirst().orElseThrow().id();
         Long teacherId = initial.users().stream().filter(user -> "TEACHER".equals(user.role())).findFirst().orElseThrow().id();
         Long departmentId = initial.users().stream().filter(user -> "DEPARTMENT".equals(user.role())).findFirst().orElseThrow().id();
@@ -574,7 +573,7 @@ class ThesisSystemApplicationTests {
                 .id();
 
         Long replacementTopicId = workflowVerificationController.teacherProposesTopic(
-                new WorkflowVerificationController.TeacherTopicProposalRequest(
+                new WorkflowCompatibilityController.TeacherTopicProposalRequest(
                         teacherId,
                         "Replacement Topic For Existing Student",
                         "Newly approved topic should replace the old one.",
@@ -587,7 +586,7 @@ class ThesisSystemApplicationTests {
                 .id();
 
         workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(
                         replacementTopicId,
                         departmentId,
                         true,
@@ -595,11 +594,11 @@ class ThesisSystemApplicationTests {
                         "Catalog ready"
                 )
         );
-        workflowVerificationController.studentSelectsApprovedTopic(
-                new WorkflowVerificationController.TopicSelectionRequest(replacementTopicId, studentId)
+        workflowVerificationController.studentSelectsTopic(
+                new WorkflowCompatibilityController.TopicSelectionRequest(replacementTopicId, studentId)
         );
         workflowVerificationController.teacherApprovesStudentTopic(
-                new WorkflowVerificationController.TopicTeacherApprovalRequest(
+                new WorkflowCompatibilityController.TopicTeacherApprovalRequest(
                         replacementTopicId,
                         null,
                         teacherId,
@@ -611,7 +610,7 @@ class ThesisSystemApplicationTests {
         );
 
         ApiDtos.DashboardResponse finalState = workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(
                         replacementTopicId,
                         departmentId,
                         true,
@@ -640,7 +639,7 @@ class ThesisSystemApplicationTests {
 
     @Test
     void savePlanFallsBackToLatestApprovedTopicWhenClientSendsStaleTopicId() {
-        ApiDtos.DashboardResponse initial = workflowVerificationController.state();
+        ApiDtos.DashboardResponse initial = workflowVerificationController.verificationState();
         Long studentId = initial.users().stream().filter(user -> "STUDENT".equals(user.role())).skip(1).findFirst().orElseThrow().id();
         Long teacherId = initial.users().stream().filter(user -> "TEACHER".equals(user.role())).findFirst().orElseThrow().id();
         Long departmentId = initial.users().stream().filter(user -> "DEPARTMENT".equals(user.role())).findFirst().orElseThrow().id();
@@ -653,7 +652,7 @@ class ThesisSystemApplicationTests {
                 .id();
 
         Long newTopicId = workflowVerificationController.teacherProposesTopic(
-                new WorkflowVerificationController.TeacherTopicProposalRequest(
+                new WorkflowCompatibilityController.TeacherTopicProposalRequest(
                         teacherId,
                         "Plan fallback approved topic",
                         "Used to verify plan save fallback.",
@@ -666,13 +665,13 @@ class ThesisSystemApplicationTests {
                 .id();
 
         workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(newTopicId, departmentId, true, null, "Catalog ready")
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(newTopicId, departmentId, true, null, "Catalog ready")
         );
-        workflowVerificationController.studentSelectsApprovedTopic(
-                new WorkflowVerificationController.TopicSelectionRequest(newTopicId, studentId)
+        workflowVerificationController.studentSelectsTopic(
+                new WorkflowCompatibilityController.TopicSelectionRequest(newTopicId, studentId)
         );
         workflowVerificationController.teacherApprovesStudentTopic(
-                new WorkflowVerificationController.TopicTeacherApprovalRequest(
+                new WorkflowCompatibilityController.TopicTeacherApprovalRequest(
                         newTopicId,
                         null,
                         teacherId,
@@ -683,15 +682,15 @@ class ThesisSystemApplicationTests {
                 )
         );
         workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(newTopicId, departmentId, true, teacherId, "Department approved")
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(newTopicId, departmentId, true, teacherId, "Department approved")
         );
 
         ApiDtos.DashboardResponse savedPlan = workflowVerificationController.studentCreatesPlan(
-                new WorkflowVerificationController.StudentPlanRequest(
+                new WorkflowCompatibilityController.StudentPlanRequest(
                         studentId,
                         oldApprovedTopicId,
                         java.util.stream.IntStream.rangeClosed(1, 15)
-                                .mapToObj(week -> new WorkflowVerificationController.WeeklyTaskRequest(
+                                .mapToObj(week -> new WorkflowCompatibilityController.WeeklyTaskRequest(
                                         week,
                                         "Week " + week,
                                         "Deliverable " + week,
@@ -712,14 +711,14 @@ class ThesisSystemApplicationTests {
 
     @Test
     void onlyAdvisorTeacherCanApprovePlan() {
-        ApiDtos.DashboardResponse initial = workflowVerificationController.state();
+        ApiDtos.DashboardResponse initial = workflowVerificationController.verificationState();
         Long studentId = initial.users().stream().filter(user -> "STUDENT".equals(user.role())).findFirst().orElseThrow().id();
         Long teacherId = initial.users().stream().filter(user -> "TEACHER".equals(user.role())).findFirst().orElseThrow().id();
         Long nonAdvisorTeacherId = initial.users().stream().filter(user -> "TEACHER".equals(user.role())).skip(1).findFirst().orElseThrow().id();
         Long departmentId = initial.users().stream().filter(user -> "DEPARTMENT".equals(user.role())).findFirst().orElseThrow().id();
 
         Long topicId = workflowVerificationController.teacherProposesTopic(
-                new WorkflowVerificationController.TeacherTopicProposalRequest(
+                new WorkflowCompatibilityController.TeacherTopicProposalRequest(
                         teacherId,
                         "Advisor only plan approval topic",
                         "Plan should be approved only by advisor.",
@@ -732,24 +731,30 @@ class ThesisSystemApplicationTests {
                 .id();
 
         workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(topicId, departmentId, true, null, "Catalog ready")
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(topicId, departmentId, true, null, "Catalog ready")
         );
-        workflowVerificationController.studentSelectsApprovedTopic(
-                new WorkflowVerificationController.TopicSelectionRequest(topicId, studentId)
+        workflowVerificationController.studentSelectsTopic(
+                new WorkflowCompatibilityController.TopicSelectionRequest(topicId, studentId)
         );
         workflowVerificationController.teacherApprovesStudentTopic(
-                new WorkflowVerificationController.TopicTeacherApprovalRequest(topicId, null, teacherId, null, null, true, "Teacher approved")
+                new WorkflowCompatibilityController.TopicTeacherApprovalRequest(
+                        topicId,
+                        null,
+                        teacherId,
+                        null,
+                        true,
+                        "Teacher approved")
         );
         workflowVerificationController.departmentApprovesTopic(
-                new WorkflowVerificationController.TopicDepartmentApprovalRequest(topicId, departmentId, true, teacherId, "Advisor assigned")
+                new WorkflowCompatibilityController.TopicDepartmentApprovalRequest(topicId, departmentId, true, teacherId, "Advisor assigned")
         );
 
         Long planId = workflowVerificationController.studentCreatesPlan(
-                new WorkflowVerificationController.StudentPlanRequest(
+                new WorkflowCompatibilityController.StudentPlanRequest(
                         studentId,
                         topicId,
                         java.util.stream.IntStream.rangeClosed(1, 15)
-                                .mapToObj(week -> new WorkflowVerificationController.WeeklyTaskRequest(week, "Week " + week, "Deliverable " + week, "Focus " + week))
+                                .mapToObj(week -> new WorkflowCompatibilityController.WeeklyTaskRequest(week, "Week " + week, "Deliverable " + week, "Focus " + week))
                                 .toList()
                 )
         ).plans().stream()
@@ -759,12 +764,12 @@ class ThesisSystemApplicationTests {
                 .id();
 
         workflowVerificationController.studentSubmitsPlan(
-                new WorkflowVerificationController.PlanSubmitRequest(planId, studentId)
+                new WorkflowCompatibilityController.PlanSubmitRequest(planId, studentId)
         );
 
         assertThrows(IllegalStateException.class, () ->
                 workflowVerificationController.teacherApprovesPlan(
-                        new WorkflowVerificationController.PlanApprovalRequest(planId, null, nonAdvisorTeacherId, null, true, "Not advisor")
+                        new WorkflowCompatibilityController.PlanApprovalRequest(planId, null, nonAdvisorTeacherId, null, true, "Not advisor")
                 )
         );
     }

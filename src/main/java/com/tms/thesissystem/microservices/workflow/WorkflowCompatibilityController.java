@@ -147,8 +147,8 @@ public class WorkflowCompatibilityController {
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiErrorResponse handleDomainError(RuntimeException exception) {
-        return new ApiErrorResponse(exception.getMessage());
+    public ApiDtos.ApiErrorResponse handleDomainError(RuntimeException exception) {
+        return new ApiDtos.ApiErrorResponse(exception.getMessage());
     }
 
     public record StudentTopicProposalRequest(Long studentId, String title, String description, String program) {
@@ -207,8 +207,5 @@ public class WorkflowCompatibilityController {
             }
             return departmentId;
         }
-    }
-
-    public record ApiErrorResponse(String message) {
     }
 }

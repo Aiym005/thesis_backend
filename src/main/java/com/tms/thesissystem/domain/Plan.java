@@ -1,9 +1,12 @@
 package com.tms.thesissystem.domain;
 
+import lombok.Getter;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+@Getter
 public class Plan {
     public static final int REQUIRED_WEEKS = 15;
 
@@ -83,23 +86,13 @@ public class Plan {
     }
 
     public Long id() { return id; }
-    public Long getId() { return id; }
     public Long topicId() { return topicId; }
-    public Long getTopicId() { return topicId; }
     public String topicTitle() { return topicTitle; }
-    public String getTopicTitle() { return topicTitle; }
     public Long studentId() { return studentId; }
-    public Long getStudentId() { return studentId; }
     public String studentName() { return studentName; }
-    public String getStudentName() { return studentName; }
     public PlanStatus status() { return status; }
-    public PlanStatus getStatus() { return status; }
     public List<WeeklyTask> tasks() { return List.copyOf(tasks); }
-    public List<WeeklyTask> getTasks() { return List.copyOf(tasks); }
     public List<ApprovalRecord> approvals() { return List.copyOf(approvals); }
-    public List<ApprovalRecord> getApprovals() { return List.copyOf(approvals); }
     public LocalDateTime createdAt() { return createdAt; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime updatedAt() { return updatedAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

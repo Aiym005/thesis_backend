@@ -1,10 +1,13 @@
 package com.tms.thesissystem.application.service;
 
 import com.tms.thesissystem.application.port.WorkflowRepository;
+import com.tms.thesissystem.application.service.security.JwtTokenService;
 import com.tms.thesissystem.api.ApiDtos;
 import com.tms.thesissystem.domain.User;
 import com.tms.thesissystem.domain.UserRole;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 
@@ -19,7 +22,9 @@ class AuthServiceTest {
 
     private final WorkflowRepository workflowRepository = mock(WorkflowRepository.class);
     private final AuthAccountStore authAccountStore = mock(AuthAccountStore.class);
-    private final AuthService authService = new AuthService(workflowRepository, authAccountStore);
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final JwtTokenService jwtTokenService = mock(JwtTokenService.class);
+    private final AuthService authService = new AuthService(workflowRepository, authAccountStore, passwordEncoder, jwtTokenService);
 
     @Test
     void returnsValidationMessageWhenCredentialsBlank() {
@@ -28,13 +33,15 @@ class AuthServiceTest {
         assertThat(response.ok()).isFalse();
         assertThat(response.message()).contains("Нэвтрэх нэр");
         assertThat(response.user()).isNull();
+        assertThat(response.token()).isNull();
     }
 
     @Test
     void authenticatesUsingEmailAliasAndNormalizesUsername() {
         when(authAccountStore.findByUsername("22b1num0027")).thenReturn(Optional.of(
-                new AuthAccountStore.AuthAccount(100001L, "22b1num0027", sha256("secret"), "student", "Ану", null, null)
+                new AuthAccountStore.AuthAccount(100001L, "22b1num0027", passwordEncoder.encode("secret"), "student", "Ану", null, null)
         ));
+        when(jwtTokenService.issueToken(org.mockito.ArgumentMatchers.any())).thenReturn("jwt-token");
 
         ApiDtos.LoginResponse response = authService.login("  22b1num0027  ", "secret");
 
@@ -42,45 +49,49 @@ class AuthServiceTest {
         assertThat(response.user().id()).isEqualTo(100001L);
         assertThat(response.user().username()).isEqualTo("22b1num0027");
         assertThat(response.user().role()).isEqualTo("student");
+        assertThat(response.token()).isEqualTo("jwt-token");
     }
 
     @Test
     void authenticatesDepartmentUserViaDepartmentAlias() {
         when(authAccountStore.findByUsername("sisi-admin")).thenReturn(Optional.of(
-                new AuthAccountStore.AuthAccount(300001L, "sisi-admin", sha256("secret"), "department", "Department Admin", null, null)
+                new AuthAccountStore.AuthAccount(300001L, "sisi-admin", passwordEncoder.encode("secret"), "department", "Department Admin", null, null)
         ));
+        when(jwtTokenService.issueToken(org.mockito.ArgumentMatchers.any())).thenReturn("jwt-token");
 
         ApiDtos.LoginResponse response = authService.login("sisi-admin", "secret");
 
         assertThat(response.ok()).isTrue();
         assertThat(response.user().id()).isEqualTo(300001L);
         assertThat(response.user().role()).isEqualTo("department");
+        assertThat(response.token()).isEqualTo("jwt-token");
     }
 
     @Test
     void returnsErrorForWrongPassword() {
         when(authAccountStore.findByUsername("anu")).thenReturn(Optional.of(
-                new AuthAccountStore.AuthAccount(100001L, "anu", sha256("secret"), "student", "Ану", null, null)
+                new AuthAccountStore.AuthAccount(100001L, "anu", passwordEncoder.encode("secret"), "student", "Ану", null, null)
         ));
 
         ApiDtos.LoginResponse response = authService.login("anu", "wrong");
 
         assertThat(response.ok()).isFalse();
         assertThat(response.message()).contains("буруу");
+        assertThat(response.token()).isNull();
     }
 
     @Test
     void resetPasswordReturnsTemporaryPasswordForKnownIdentifier() {
         when(authAccountStore.findByUsername("22b1num0027")).thenReturn(Optional.of(
-                new AuthAccountStore.AuthAccount(100001L, "22b1num0027", sha256("secret"), "student", "Ану", null, null)
+                new AuthAccountStore.AuthAccount(100001L, "22b1num0027", passwordEncoder.encode("secret"), "student", "Ану", null, null)
         ));
 
         ApiDtos.PasswordResetResponse response = authService.resetPassword("22b1num0027");
 
         assertThat(response.ok()).isTrue();
         assertThat(response.username()).isEqualTo("22b1num0027");
-        assertThat(response.message()).contains("Түр нууц үг");
-        verify(authAccountStore).save(eq(100001L), eq("22b1num0027"), anyString(), eq("student"), eq("Ану"));
+        assertThat(response.message()).contains("токен");
+        assertThat(response.resetToken()).isNotBlank();
     }
 
     @Test
@@ -96,12 +107,4 @@ class AuthServiceTest {
         verify(authAccountStore).save(eq(900001L), eq("new-user"), anyString(), eq("student"), eq("new-user"));
     }
 
-    private String sha256(String value) {
-        try {
-            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
-            return java.util.HexFormat.of().formatHex(digest.digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        } catch (Exception exception) {
-            throw new RuntimeException(exception);
-        }
-    }
 }

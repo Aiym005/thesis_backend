@@ -5,6 +5,7 @@ import com.tms.thesissystem.application.service.AuthService;
 import com.tms.thesissystem.application.service.DatabaseStatusService;
 import com.tms.thesissystem.application.service.WorkflowCommandService;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
+import com.tms.thesissystem.config.PersistenceConfiguration;
 import com.tms.thesissystem.infrastructure.repository.PostgresWorkflowRepository;
 import com.tms.thesissystem.service.user.api.UserServiceController;
 import org.springframework.boot.SpringApplication;
@@ -18,6 +19,7 @@ import org.springframework.context.annotation.FilterType;
         UserServiceController.class,
         AuthService.class,
         WorkflowQueryService.class,
+        PersistenceConfiguration.class,
         PostgresWorkflowRepository.class
 }, excludeFilters = @ComponentScan.Filter(
         type = FilterType.ASSIGNABLE_TYPE,

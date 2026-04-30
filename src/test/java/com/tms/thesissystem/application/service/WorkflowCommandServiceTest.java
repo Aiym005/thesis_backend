@@ -64,7 +64,7 @@ class WorkflowCommandServiceTest {
         verify(repository).saveTopic(topic);
         WorkflowEvent event = capturedEvent();
         assertThat(event.action()).isEqualTo("TOPIC_PROPOSED");
-        assertThat(event.recipientIds()).containsExactly(TEACHER_ID);
+        assertThat(event.recipientIds()).containsExactly(TEACHER_ID, STUDENT_ID);
     }
 
     @Test
@@ -85,7 +85,7 @@ class WorkflowCommandServiceTest {
         assertThat(previousTopic.status()).isEqualTo(TopicStatus.SUPERSEDED);
         WorkflowEvent event = capturedEvent();
         assertThat(event.action()).isEqualTo("TOPIC_FINALIZED");
-        assertThat(event.recipientIds()).containsExactly(STUDENT_ID, TEACHER_ID);
+        assertThat(event.recipientIds()).containsExactly(DEPARTMENT_ID, STUDENT_ID, TEACHER_ID);
     }
 
     @Test
@@ -103,10 +103,10 @@ class WorkflowCommandServiceTest {
 
         assertThat(plan.id()).isEqualTo(50L);
         assertThat(plan.topicId()).isEqualTo(22L);
-        assertThat(plan.tasks()).hasSize(3);
+        assertThat(plan.tasks()).hasSize(15);
         WorkflowEvent event = capturedEvent();
         assertThat(event.action()).isEqualTo("PLAN_SAVED");
-        assertThat(event.recipientIds()).containsExactly(STUDENT_ID);
+        assertThat(event.recipientIds()).containsExactly(STUDENT_ID, TEACHER_ID);
     }
 
     @Test

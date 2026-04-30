@@ -2,8 +2,10 @@ package com.tms.thesissystem.service.user.api;
 
 import com.tms.thesissystem.api.ApiDtos;
 import com.tms.thesissystem.api.ApiResponseMapper;
+import com.tms.thesissystem.application.service.AuthAccountStore;
 import com.tms.thesissystem.application.service.AuthService;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,20 +19,28 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
+@RequiredArgsConstructor
 public class UserServiceController {
     private final WorkflowQueryService queryService;
     private final ApiResponseMapper apiResponseMapper;
     private final AuthService authService;
-
-    public UserServiceController(WorkflowQueryService queryService, ApiResponseMapper apiResponseMapper, AuthService authService) {
-        this.queryService = queryService;
-        this.apiResponseMapper = apiResponseMapper;
-        this.authService = authService;
-    }
+    private final AuthAccountStore authAccountStore;
 
     @GetMapping
     public List<ApiDtos.UserDto> users() {
         return queryService.getDashboard().users().stream()
+                .map(apiResponseMapper::toUserDto)
+                .toList();
+    }
+
+    @GetMapping("/login-enabled-teachers")
+    public List<ApiDtos.UserDto> loginEnabledTeachers() {
+        List<Long> teacherIds = authAccountStore.findAllByRole("teacher").stream()
+                .map(AuthAccountStore.AuthAccount::userId)
+                .toList();
+        return queryService.getDashboard().users().stream()
+                .filter(user -> user.role().name().equals("TEACHER"))
+                .filter(user -> teacherIds.contains(user.id()))
                 .map(apiResponseMapper::toUserDto)
                 .toList();
     }

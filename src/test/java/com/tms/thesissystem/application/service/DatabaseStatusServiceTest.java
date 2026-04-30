@@ -13,7 +13,6 @@ class DatabaseStatusServiceTest {
                 5432,
                 "thesisdb",
                 "user",
-                "pass",
                 "jdbc:postgresql://localhost:1/does_not_exist"
         );
 

@@ -1,5 +1,6 @@
 package com.tms.thesissystem.microservices.notification;
 
+import com.tms.thesissystem.config.PersistenceConfiguration;
 import com.tms.thesissystem.config.RabbitMqConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -8,6 +9,7 @@ import org.springframework.context.annotation.ComponentScan;
 @SpringBootApplication
 @ComponentScan(basePackageClasses = {
         NotificationServiceApplication.class,
+        PersistenceConfiguration.class,
         RabbitMqConfig.class
 })
 public class NotificationServiceApplication {

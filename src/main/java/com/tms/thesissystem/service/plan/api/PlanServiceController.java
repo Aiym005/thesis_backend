@@ -73,8 +73,8 @@ public class PlanServiceController {
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiErrorResponse handleDomainError(RuntimeException exception) {
-        return new ApiErrorResponse(exception.getMessage());
+    public ApiDtos.ApiErrorResponse handleDomainError(RuntimeException exception) {
+        return new ApiDtos.ApiErrorResponse(exception.getMessage());
     }
 
     public record PlanSaveRequest(Long studentId, Long topicId, List<WeeklyTaskRequest> tasks) {
@@ -87,8 +87,5 @@ public class PlanServiceController {
     }
 
     public record PlanDecisionRequest(Long planId, Long actorId, boolean approved, String note) {
-    }
-
-    public record ApiErrorResponse(String message) {
     }
 }

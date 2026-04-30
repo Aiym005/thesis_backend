@@ -10,15 +10,6 @@ public record User(
         String departmentName,
         String program
 ) {
-    public Long getId() { return id; }
-    public UserRole getRole() { return role; }
-    public String getLoginId() { return loginId; }
-    public String getFirstName() { return firstName; }
-    public String getLastName() { return lastName; }
-    public String getEmail() { return email; }
-    public String getDepartmentName() { return departmentName; }
-    public String getProgram() { return program; }
-
     public String fullName() {
         return firstName + " " + lastName;
     }

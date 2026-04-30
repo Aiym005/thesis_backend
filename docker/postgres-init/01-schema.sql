@@ -74,6 +74,35 @@ CREATE TABLE IF NOT EXISTS plan_response (
     res_date DATE
 );
 
+CREATE TABLE IF NOT EXISTS workflow_review (
+    id BIGINT PRIMARY KEY,
+    plan_id BIGINT NOT NULL REFERENCES plan(id) ON DELETE CASCADE,
+    week_number INTEGER NOT NULL,
+    reviewer_id BIGINT NOT NULL,
+    reviewer_name TEXT NOT NULL,
+    score INTEGER NOT NULL,
+    comment TEXT,
+    created_at TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS workflow_notification (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS workflow_audit (
+    id BIGINT PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    entity_id BIGINT NOT NULL,
+    action TEXT NOT NULL,
+    actor_name TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+
 CREATE SEQUENCE IF NOT EXISTS auth_account_user_id_seq START WITH 1 INCREMENT BY 1;
 
 CREATE TABLE IF NOT EXISTS auth_account (

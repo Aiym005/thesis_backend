@@ -1,9 +1,12 @@
 package com.tms.thesissystem.domain;
 
+import lombok.Getter;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+@Getter
 public class Topic {
     private final Long id;
     private String title;
@@ -153,33 +156,18 @@ public class Topic {
     }
 
     public Long id() { return id; }
-    public Long getId() { return id; }
     public String title() { return title; }
-    public String getTitle() { return title; }
     public String description() { return description; }
-    public String getDescription() { return description; }
     public String program() { return program; }
-    public String getProgram() { return program; }
     public Long proposerId() { return proposerId; }
-    public Long getProposerId() { return proposerId; }
     public String proposerName() { return proposerName; }
-    public String getProposerName() { return proposerName; }
     public UserRole proposerRole() { return proposerRole; }
-    public UserRole getProposerRole() { return proposerRole; }
     public Long ownerStudentId() { return ownerStudentId; }
-    public Long getOwnerStudentId() { return ownerStudentId; }
     public String ownerStudentName() { return ownerStudentName; }
-    public String getOwnerStudentName() { return ownerStudentName; }
     public Long advisorTeacherId() { return advisorTeacherId; }
-    public Long getAdvisorTeacherId() { return advisorTeacherId; }
     public String advisorTeacherName() { return advisorTeacherName; }
-    public String getAdvisorTeacherName() { return advisorTeacherName; }
     public TopicStatus status() { return status; }
-    public TopicStatus getStatus() { return status; }
     public LocalDateTime createdAt() { return createdAt; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime updatedAt() { return updatedAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
     public List<ApprovalRecord> approvals() { return List.copyOf(approvals); }
-    public List<ApprovalRecord> getApprovals() { return List.copyOf(approvals); }
 }

@@ -133,8 +133,8 @@ public class TopicServiceController {
 
     @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiErrorResponse handleDomainError(RuntimeException exception) {
-        return new ApiErrorResponse(exception.getMessage());
+    public ApiDtos.ApiErrorResponse handleDomainError(RuntimeException exception) {
+        return new ApiDtos.ApiErrorResponse(exception.getMessage());
     }
 
     public record StudentTopicProposalRequest(Long studentId, String title, String description, String program) {
@@ -165,8 +165,5 @@ public class TopicServiceController {
     }
 
     public record TopicDepartmentApprovalRequest(Long topicId, Long departmentId, boolean approved, Long advisorTeacherId, String note) {
-    }
-
-    public record ApiErrorResponse(String message) {
     }
 }
