@@ -1,11 +1,15 @@
 package com.tms.thesissystem.application.service;
 
 import com.tms.thesissystem.application.port.WorkflowRepository;
+import com.tms.thesissystem.application.service.security.AuthenticatedAccount;
 import com.tms.thesissystem.application.service.security.JwtTokenService;
 import com.tms.thesissystem.api.ApiDtos;
 import com.tms.thesissystem.domain.User;
 import com.tms.thesissystem.domain.UserRole;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -24,7 +28,14 @@ class AuthServiceTest {
     private final AuthAccountStore authAccountStore = mock(AuthAccountStore.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final JwtTokenService jwtTokenService = mock(JwtTokenService.class);
-    private final AuthService authService = new AuthService(workflowRepository, authAccountStore, passwordEncoder, jwtTokenService);
+    private final AuthenticationManager authenticationManager = mock(AuthenticationManager.class);
+    private final AuthService authService = new AuthService(
+            workflowRepository,
+            authAccountStore,
+            passwordEncoder,
+            jwtTokenService,
+            authenticationManager
+    );
 
     @Test
     void returnsValidationMessageWhenCredentialsBlank() {
@@ -38,9 +49,15 @@ class AuthServiceTest {
 
     @Test
     void authenticatesUsingEmailAliasAndNormalizesUsername() {
-        when(authAccountStore.findByUsername("22b1num0027")).thenReturn(Optional.of(
-                new AuthAccountStore.AuthAccount(100001L, "22b1num0027", passwordEncoder.encode("secret"), "student", "Ану", null, null)
-        ));
+        AuthAccountStore.AuthAccount account = new AuthAccountStore.AuthAccount(
+                100001L, "22b1num0027", passwordEncoder.encode("secret"), "student", "Ану", null, null
+        );
+        when(authenticationManager.authenticate(org.mockito.ArgumentMatchers.any(UsernamePasswordAuthenticationToken.class)))
+                .thenReturn(UsernamePasswordAuthenticationToken.authenticated(
+                        new AuthenticatedAccount(account),
+                        null,
+                        java.util.List.of()
+                ));
         when(jwtTokenService.issueToken(org.mockito.ArgumentMatchers.any())).thenReturn("jwt-token");
 
         ApiDtos.LoginResponse response = authService.login("  22b1num0027  ", "secret");
@@ -54,9 +71,15 @@ class AuthServiceTest {
 
     @Test
     void authenticatesDepartmentUserViaDepartmentAlias() {
-        when(authAccountStore.findByUsername("sisi-admin")).thenReturn(Optional.of(
-                new AuthAccountStore.AuthAccount(300001L, "sisi-admin", passwordEncoder.encode("secret"), "department", "Department Admin", null, null)
-        ));
+        AuthAccountStore.AuthAccount account = new AuthAccountStore.AuthAccount(
+                300001L, "sisi-admin", passwordEncoder.encode("secret"), "department", "Department Admin", null, null
+        );
+        when(authenticationManager.authenticate(org.mockito.ArgumentMatchers.any(UsernamePasswordAuthenticationToken.class)))
+                .thenReturn(UsernamePasswordAuthenticationToken.authenticated(
+                        new AuthenticatedAccount(account),
+                        null,
+                        java.util.List.of()
+                ));
         when(jwtTokenService.issueToken(org.mockito.ArgumentMatchers.any())).thenReturn("jwt-token");
 
         ApiDtos.LoginResponse response = authService.login("sisi-admin", "secret");
@@ -69,9 +92,8 @@ class AuthServiceTest {
 
     @Test
     void returnsErrorForWrongPassword() {
-        when(authAccountStore.findByUsername("anu")).thenReturn(Optional.of(
-                new AuthAccountStore.AuthAccount(100001L, "anu", passwordEncoder.encode("secret"), "student", "Ану", null, null)
-        ));
+        when(authenticationManager.authenticate(org.mockito.ArgumentMatchers.any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new BadCredentialsException("bad credentials"));
 
         ApiDtos.LoginResponse response = authService.login("anu", "wrong");
 

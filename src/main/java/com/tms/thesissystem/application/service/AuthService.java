@@ -1,11 +1,15 @@
 package com.tms.thesissystem.application.service;
 
 import com.tms.thesissystem.application.port.WorkflowRepository;
+import com.tms.thesissystem.application.service.security.AuthenticatedAccount;
 import com.tms.thesissystem.application.service.security.JwtTokenService;
 import com.tms.thesissystem.api.ApiDtos;
 import com.tms.thesissystem.domain.User;
 import com.tms.thesissystem.domain.UserRole;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -21,6 +25,7 @@ public class AuthService {
     private final AuthAccountStore authAccountStore;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
+    private final AuthenticationManager authenticationManager;
 
     public ApiDtos.LoginResponse login(String username, String password) {
         String normalizedUsername = normalize(username);
@@ -33,23 +38,17 @@ public class AuthService {
             return new ApiDtos.LoginResponse(false, "Нэвтрэх нэрийн формат буруу байна.", null, null);
         }
 
-        Optional<AuthAccountStore.AuthAccount> account = authAccountStore.findByUsername(normalizedUsername);
-        if (account.isEmpty()) {
+        AuthenticatedAccount account;
+        try {
+            account = (AuthenticatedAccount) authenticationManager.authenticate(
+                    UsernamePasswordAuthenticationToken.unauthenticated(normalizedUsername, normalizedPassword)
+            ).getPrincipal();
+        } catch (BadCredentialsException exception) {
             return new ApiDtos.LoginResponse(false, "Нэвтрэх нэр эсвэл нууц үг буруу байна.", null, null);
         }
-        if (!passwordEncoder.matches(normalizedPassword, account.get().passwordHash())) {
-            return new ApiDtos.LoginResponse(false, "Нэвтрэх нэр эсвэл нууц үг буруу байна.", null, null);
-        }
-        String role = normalizeStoredRole(account.get().role(), normalizedUsername);
-        Long resolvedUserId = resolveWorkflowUserId(account.get(), normalizedUsername, role);
-        ApiDtos.AuthUserDto authUser = new ApiDtos.AuthUserDto(
-                resolvedUserId,
-                account.get().username(),
-                account.get().displayName() == null || account.get().displayName().isBlank()
-                        ? account.get().username()
-                        : account.get().displayName(),
-                role
-        );
+        String role = account.normalizedRole();
+        Long resolvedUserId = resolveWorkflowUserId(account.userId(), normalizedUsername, role);
+        ApiDtos.AuthUserDto authUser = account.toAuthUser(resolvedUserId);
         return new ApiDtos.LoginResponse(true, "Амжилттай нэвтэрлээ.", authUser, jwtTokenService.issueToken(authUser));
     }
 
@@ -153,9 +152,9 @@ public class AuthService {
         return inferRole(username).name().toLowerCase(Locale.ROOT);
     }
 
-    private Long resolveWorkflowUserId(AuthAccountStore.AuthAccount account, String normalizedUsername, String normalizedRole) {
+    private Long resolveWorkflowUserId(Long accountUserId, String normalizedUsername, String normalizedRole) {
         UserRole role = UserRole.valueOf(normalizedRole.toUpperCase(Locale.ROOT));
-        Optional<User> directMatch = workflowRepository.findUserById(account.userId())
+        Optional<User> directMatch = workflowRepository.findUserById(accountUserId)
                 .filter(user -> user.role() == role);
         if (directMatch.isPresent()) {
             return directMatch.get().id();
@@ -165,6 +164,6 @@ public class AuthService {
                 .filter(user -> normalizedUsername.equals(normalize(user.loginId())))
                 .map(User::id)
                 .findFirst()
-                .orElse(account.userId());
+                .orElse(accountUserId);
     }
 }

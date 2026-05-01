@@ -1,12 +1,9 @@
 package com.tms.thesissystem.domain;
 
-import lombok.Getter;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-@Getter
 public class Plan {
     public static final int REQUIRED_WEEKS = 15;
 
