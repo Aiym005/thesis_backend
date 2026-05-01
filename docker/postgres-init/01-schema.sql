@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS student (
     firstname TEXT NOT NULL,
     lastname TEXT NOT NULL,
     mail TEXT,
+    phone_number TEXT,
     program TEXT,
     sisi_id TEXT,
     is_choosed BOOLEAN DEFAULT FALSE,
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS teacher (
     firstname TEXT NOT NULL,
     lastname TEXT NOT NULL,
     mail TEXT,
+    phone_number TEXT,
     num_of_choosed_stud INTEGER DEFAULT 0
 );
 

@@ -5,6 +5,11 @@ import com.tms.thesissystem.api.ApiResponseMapper;
 import com.tms.thesissystem.application.service.AuthAccountStore;
 import com.tms.thesissystem.application.service.AuthService;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,7 +52,7 @@ public class UserServiceController {
 
     @PostMapping("/login")
     @ResponseStatus(HttpStatus.OK)
-    public ApiDtos.LoginResponse login(@RequestBody LoginRequest request) {
+    public ApiDtos.LoginResponse login(@Valid @RequestBody LoginRequest request) {
         ApiDtos.LoginResponse response = authService.login(request.username(), request.password());
         if (!response.ok()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, response.message());
@@ -57,11 +62,14 @@ public class UserServiceController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiDtos.RegistrationResponse register(@RequestBody RegistrationRequest request) {
+    public ApiDtos.RegistrationResponse register(@Valid @RequestBody RegistrationRequest request) {
         ApiDtos.RegistrationResponse response = authService.register(
                 request.username(),
                 request.password(),
-                request.confirmPassword()
+                request.confirmPassword(),
+                request.firstName(),
+                request.lastName(),
+                request.phoneNumber()
         );
         if (!response.ok()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, response.message());
@@ -79,10 +87,40 @@ public class UserServiceController {
         return response;
     }
 
-    public record LoginRequest(String username, String password) {
+    public record LoginRequest(
+            @NotBlank
+            @Size(min = 3, max = 64)
+            @Pattern(regexp = "^[a-zA-Z0-9._@-]{3,64}$")
+            String username,
+            @NotBlank
+            @Size(min = 6, max = 128)
+            String password
+    ) {
     }
 
-    public record RegistrationRequest(String username, String password, String confirmPassword) {
+    public record RegistrationRequest(
+            @NotBlank
+            @Size(min = 3, max = 64)
+            @Pattern(regexp = "^[a-zA-Z0-9._@-]{3,64}$")
+            String username,
+            @NotBlank
+            @Size(min = 6, max = 128)
+            String password,
+            @NotBlank
+            @Size(min = 6, max = 128)
+            String confirmPassword,
+            @NotBlank
+            @Size(min = 2, max = 50)
+            @Pattern(regexp = "^[\\p{L} .'-]{2,50}$")
+            String firstName,
+            @NotBlank
+            @Size(min = 2, max = 50)
+            @Pattern(regexp = "^[\\p{L} .'-]{2,50}$")
+            String lastName,
+            @NotNull
+            @Pattern(regexp = "^[0-9+()\\-\\s]{8,20}$")
+            String phoneNumber
+    ) {
     }
 
     public record ForgotPasswordRequest(String username) {

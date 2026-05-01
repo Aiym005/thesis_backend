@@ -25,6 +25,8 @@ public class StudentEntity {
     private String lastName;
     @Column(name = "mail")
     private String mail;
+    @Column(name = "phone_number")
+    private String phoneNumber;
     private String program;
     @Column(name = "sisi_id")
     private String sisiId;

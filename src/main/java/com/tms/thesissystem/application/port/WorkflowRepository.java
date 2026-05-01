@@ -15,7 +15,7 @@ public interface WorkflowRepository {
     List<User> findAllUsers();
     List<User> findUsersByRole(UserRole role);
     Optional<User> findUserById(Long id);
-    User createUserAccount(String username, UserRole role);
+    User createUserAccount(String username, UserRole role, String firstName, String lastName, String phoneNumber);
     Long nextTopicId();
     List<Topic> findAllTopics();
     Optional<Topic> findTopicById(Long id);

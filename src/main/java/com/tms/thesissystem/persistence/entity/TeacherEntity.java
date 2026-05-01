@@ -25,6 +25,8 @@ public class TeacherEntity {
     private String lastName;
     @Column(name = "mail")
     private String mail;
+    @Column(name = "phone_number")
+    private String phoneNumber;
     @Column(name = "num_of_choosed_stud")
     private int numberOfChoosedStudents;
 }

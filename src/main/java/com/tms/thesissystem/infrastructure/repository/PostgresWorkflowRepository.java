@@ -167,31 +167,33 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
     }
 
     @Override
-    public synchronized User createUserAccount(String username, UserRole role) {
+    public synchronized User createUserAccount(String username, UserRole role, String firstName, String lastName, String phoneNumber) {
         long departmentId = ensureDefaultDepartment();
         return switch (role) {
             case STUDENT -> {
                 StudentEntity student = new StudentEntity();
                 student.setDepId(departmentId);
-                student.setFirstName(username);
-                student.setLastName("User");
+                student.setFirstName(firstName);
+                student.setLastName(lastName);
                 student.setMail(username + "@tms.mn");
+                student.setPhoneNumber(phoneNumber);
                 student.setProgram("B.SE");
                 student.setSisiId(username);
                 student.setChoosed(false);
                 student.setProposedNumber(0);
                 StudentEntity saved = studentRepository.save(student);
-                yield new User(encodeUserId(UserRole.STUDENT, saved.getId()), UserRole.STUDENT, username, username, "User", username + "@tms.mn", SOFTWARE_ENGINEERING, "B.SE");
+                yield new User(encodeUserId(UserRole.STUDENT, saved.getId()), UserRole.STUDENT, username, firstName, lastName, username + "@tms.mn", SOFTWARE_ENGINEERING, "B.SE");
             }
             case TEACHER -> {
                 TeacherEntity teacher = new TeacherEntity();
                 teacher.setDepId(departmentId);
-                teacher.setFirstName(username);
-                teacher.setLastName("Teacher");
+                teacher.setFirstName(firstName);
+                teacher.setLastName(lastName);
                 teacher.setMail(username + "@tms.mn");
+                teacher.setPhoneNumber(phoneNumber);
                 teacher.setNumberOfChoosedStudents(0);
                 TeacherEntity saved = teacherRepository.save(teacher);
-                yield new User(encodeUserId(UserRole.TEACHER, saved.getId()), UserRole.TEACHER, teacherLoginId(saved.getId()), username, "Teacher", username + "@tms.mn", SOFTWARE_ENGINEERING, "B.SE");
+                yield new User(encodeUserId(UserRole.TEACHER, saved.getId()), UserRole.TEACHER, teacherLoginId(saved.getId()), firstName, lastName, username + "@tms.mn", SOFTWARE_ENGINEERING, "B.SE");
             }
             case DEPARTMENT -> {
                 DepartmentEntity department = new DepartmentEntity();

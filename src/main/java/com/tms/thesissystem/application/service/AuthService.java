@@ -34,9 +34,6 @@ public class AuthService {
         if (normalizedUsername.isBlank() || normalizedPassword.isBlank()) {
             return new ApiDtos.LoginResponse(false, "Нэвтрэх нэр болон нууц үгээ оруулна уу.", null, null);
         }
-        if (!isSafeUsername(normalizedUsername)) {
-            return new ApiDtos.LoginResponse(false, "Нэвтрэх нэрийн формат буруу байна.", null, null);
-        }
 
         AuthenticatedAccount account;
         try {
@@ -52,22 +49,16 @@ public class AuthService {
         return new ApiDtos.LoginResponse(true, "Амжилттай нэвтэрлээ.", authUser, jwtTokenService.issueToken(authUser));
     }
 
-    public ApiDtos.RegistrationResponse register(String username, String password, String confirmPassword) {
+    public ApiDtos.RegistrationResponse register(String username, String password, String confirmPassword, String firstName, String lastName, String phoneNumber) {
         String normalizedUsername = normalize(username);
         String normalizedPassword = password == null ? "" : password.trim();
         String normalizedConfirm = confirmPassword == null ? "" : confirmPassword.trim();
+        String normalizedFirstName = firstName == null ? "" : firstName.trim();
+        String normalizedLastName = lastName == null ? "" : lastName.trim();
+        String normalizedPhoneNumber = phoneNumber == null ? "" : phoneNumber.trim();
 
         if (normalizedUsername.isBlank() || normalizedPassword.isBlank() || normalizedConfirm.isBlank()) {
             return new ApiDtos.RegistrationResponse(false, "Нэвтрэх нэр, нууц үг, давтан нууц үгээ бүрэн оруулна уу.", null, null, null);
-        }
-        if (!isSafeUsername(normalizedUsername)) {
-            return new ApiDtos.RegistrationResponse(false, "Нэвтрэх нэр зөвхөн үсэг, тоо, цэг, зураас, @, underscore агуулна.", null, null, null);
-        }
-        if (normalizedPassword.length() < 6) {
-            return new ApiDtos.RegistrationResponse(false, "Нууц үг хамгийн багадаа 6 тэмдэгт байна.", null, null, null);
-        }
-        if (normalizedPassword.length() > 128) {
-            return new ApiDtos.RegistrationResponse(false, "Нууц үг хэт урт байна.", null, null, null);
         }
         if (!normalizedPassword.equals(normalizedConfirm)) {
             return new ApiDtos.RegistrationResponse(false, "Нууц үг таарахгүй байна.", null, null, null);
@@ -77,18 +68,26 @@ public class AuthService {
         }
 
         UserRole role = inferRole(normalizedUsername);
-        User workflowUser = workflowRepository.createUserAccount(normalizedUsername, role);
+        if (role == UserRole.STUDENT || role == UserRole.TEACHER) {
+            if (normalizedFirstName.isBlank() || normalizedLastName.isBlank() || normalizedPhoneNumber.isBlank()) {
+                return new ApiDtos.RegistrationResponse(false, "Нэр, овог, утасны дугаарыг бүрэн оруулна уу.", null, null, null);
+            }
+        }
+
+        String resolvedFirstName = normalizedFirstName.isBlank() ? normalizedUsername : normalizedFirstName;
+        String resolvedLastName = normalizedLastName.isBlank() ? role == UserRole.TEACHER ? "Teacher" : "User" : normalizedLastName;
+        User workflowUser = workflowRepository.createUserAccount(normalizedUsername, role, resolvedFirstName, resolvedLastName, normalizedPhoneNumber);
         authAccountStore.save(
                 workflowUser.id(),
                 normalizedUsername,
                 passwordEncoder.encode(normalizedPassword),
                 role.name().toLowerCase(Locale.ROOT),
-                normalizedUsername
+                resolvedFirstName + " " + resolvedLastName
         );
         ApiDtos.AuthUserDto authUser = new ApiDtos.AuthUserDto(
                 workflowUser.id(),
                 normalizedUsername,
-                normalizedUsername,
+                resolvedFirstName + " " + resolvedLastName,
                 role.name().toLowerCase(Locale.ROOT)
         );
         return new ApiDtos.RegistrationResponse(
