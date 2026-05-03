@@ -43,6 +43,7 @@ public class AuthService {
         } catch (BadCredentialsException exception) {
             return new ApiDtos.LoginResponse(false, "Нэвтрэх нэр эсвэл нууц үг буруу байна.", null, null);
         }
+        assert account != null;
         String role = account.normalizedRole();
         Long resolvedUserId = resolveWorkflowUserId(account.userId(), normalizedUsername, role);
         ApiDtos.AuthUserDto authUser = account.toAuthUser(resolvedUserId);

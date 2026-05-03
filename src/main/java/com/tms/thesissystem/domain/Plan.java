@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @AllArgsConstructor
@@ -17,8 +18,8 @@ public class Plan {
     private final Long studentId;
     private final String studentName;
     private PlanStatus status;
-    private final List<WeeklyTask> tasks;
-    private final List<ApprovalRecord> approvals;
+    private List<WeeklyTask> tasks;
+    private List<ApprovalRecord> approvals;
     private final LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -26,30 +27,31 @@ public class Plan {
         if (status == PlanStatus.PENDING_TEACHER_APPROVAL || status == PlanStatus.PENDING_DEPARTMENT_APPROVAL) {
             throw new IllegalStateException("Баталгаажуулалт явагдаж буй төлөвлөгөөг засах боломжгүй.");
         }
-        tasks.clear();
-        tasks.addAll(updatedTasks);
+        tasks = updatedTasks == null ? new ArrayList<>() : new ArrayList<>(updatedTasks);
         if (status == PlanStatus.REJECTED) {
-            approvals.clear();
+            approvals = new ArrayList<>();
         }
         status = PlanStatus.DRAFT;
         updatedAt = now;
     }
 
     public void submit(LocalDateTime now) {
-        if (tasks.size() == REQUIRED_WEEKS - 1) {
-            tasks.add(new WeeklyTask(
+        List<WeeklyTask> normalizedTasks = tasks == null ? new ArrayList<>() : new ArrayList<>(tasks);
+        if (normalizedTasks.size() == REQUIRED_WEEKS - 1) {
+            normalizedTasks.add(new WeeklyTask(
                     REQUIRED_WEEKS,
                     "7 хоног " + REQUIRED_WEEKS + " - milestone",
                     "Deliverable " + REQUIRED_WEEKS,
                     "Тайлан дүгнэлт, эцсийн сайжруулалт"
             ));
         }
-        if (tasks.size() != REQUIRED_WEEKS) {
+        if (normalizedTasks.size() != REQUIRED_WEEKS) {
             throw new IllegalStateException("Төлөвлөгөө 15 долоо хоногийн даалгавартай байх ёстой.");
         }
         if (status == PlanStatus.REJECTED) {
-            approvals.clear();
+            approvals = new ArrayList<>();
         }
+        tasks = normalizedTasks;
         status = PlanStatus.PENDING_TEACHER_APPROVAL;
         updatedAt = now;
     }
@@ -58,7 +60,9 @@ public class Plan {
         if (status != PlanStatus.PENDING_TEACHER_APPROVAL) {
             throw new IllegalStateException("Багшийн баталгаажуулалт хүлээж байгаа төлөвлөгөө биш байна.");
         }
-        approvals.add(new ApprovalRecord(ApprovalStage.TEACHER, teacher.id(), teacher.fullName(), approved, note, now));
+        List<ApprovalRecord> updatedApprovals = approvals == null ? new ArrayList<>() : new ArrayList<>(approvals);
+        updatedApprovals.add(new ApprovalRecord(ApprovalStage.TEACHER, teacher.id(), teacher.fullName(), approved, note, now));
+        approvals = updatedApprovals;
         status = approved ? PlanStatus.PENDING_DEPARTMENT_APPROVAL : PlanStatus.REJECTED;
         updatedAt = now;
     }
@@ -67,7 +71,9 @@ public class Plan {
         if (status != PlanStatus.PENDING_DEPARTMENT_APPROVAL) {
             throw new IllegalStateException("Тэнхимийн баталгаажуулалт хүлээж байгаа төлөвлөгөө биш байна.");
         }
-        approvals.add(new ApprovalRecord(ApprovalStage.DEPARTMENT, departmentUser.id(), departmentUser.fullName(), approved, note, now));
+        List<ApprovalRecord> updatedApprovals = approvals == null ? new ArrayList<>() : new ArrayList<>(approvals);
+        updatedApprovals.add(new ApprovalRecord(ApprovalStage.DEPARTMENT, departmentUser.id(), departmentUser.fullName(), approved, note, now));
+        approvals = updatedApprovals;
         status = approved ? PlanStatus.APPROVED : PlanStatus.REJECTED;
         updatedAt = now;
     }

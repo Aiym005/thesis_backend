@@ -5,29 +5,22 @@ import com.tms.thesissystem.api.ApiResponseMapper;
 import com.tms.thesissystem.application.service.WorkflowCommandService;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
 import com.tms.thesissystem.domain.WeeklyTask;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ExceptionHandler;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/plans")
+@RequiredArgsConstructor
 public class PlanServiceController {
     private final WorkflowQueryService queryService;
     private final WorkflowCommandService commandService;
     private final ApiResponseMapper apiResponseMapper;
-
-    public PlanServiceController(WorkflowQueryService queryService, WorkflowCommandService commandService, ApiResponseMapper apiResponseMapper) {
-        this.queryService = queryService;
-        this.commandService = commandService;
-        this.apiResponseMapper = apiResponseMapper;
-    }
 
     @GetMapping
     public ApiDtos.PlanStateResponse plans() {
@@ -69,12 +62,6 @@ public class PlanServiceController {
                         request.planId(), request.actorId(), request.approved(), request.note())),
                 apiResponseMapper.toWorkflowStateResponse(queryService.getDashboard())
         );
-    }
-
-    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiDtos.ApiErrorResponse handleDomainError(RuntimeException exception) {
-        return new ApiDtos.ApiErrorResponse(exception.getMessage());
     }
 
     public record PlanSaveRequest(Long studentId, Long topicId, List<WeeklyTaskRequest> tasks) {

@@ -46,7 +46,7 @@ public class AuthAccountStore {
     }
 
     @Transactional
-    public AuthAccount save(Long userId, String usernameValue, String passwordHash, String role, String displayName) {
+    public void save(Long userId, String usernameValue, String passwordHash, String role, String displayName) {
         LocalDateTime now = LocalDateTime.now();
         if (repository == null) {
             AuthAccount existing = inMemoryAccounts.get(userId);
@@ -60,7 +60,7 @@ public class AuthAccountStore {
                     now
             );
             inMemoryAccounts.put(userId, account);
-            return account;
+            return;
         }
         AuthAccountEntity entity = repository.findById(userId).orElseGet(AuthAccountEntity::new);
         if (entity.getCreatedAt() == null) {
@@ -72,7 +72,7 @@ public class AuthAccountStore {
         entity.setRole(role);
         entity.setDisplayName(displayName);
         entity.setUpdatedAt(now);
-        return map(repository.save(entity));
+        map(repository.save(entity));
     }
 
     private AuthAccount map(AuthAccountEntity entity) {

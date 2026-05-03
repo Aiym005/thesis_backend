@@ -2,6 +2,7 @@ package com.tms.thesissystem.application.service.security;
 
 import com.tms.thesissystem.application.service.AuthAccountStore;
 import com.tms.thesissystem.api.ApiDtos;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -10,6 +11,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 
+@NullMarked
 public class AuthenticatedAccount implements UserDetails {
     private final AuthAccountStore.AuthAccount account;
     private final Collection<? extends GrantedAuthority> authorities;

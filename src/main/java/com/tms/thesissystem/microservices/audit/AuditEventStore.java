@@ -6,12 +6,14 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Component
+@Transactional
 @RequiredArgsConstructor
 public class AuditEventStore {
     private final WorkflowAuditJpaRepository repository;
@@ -19,10 +21,10 @@ public class AuditEventStore {
 
     @PostConstruct
     void initialize() {
-        syncSequence();
+        sequence.set(repository.findTopByOrderByIdDesc().map(WorkflowAuditEntity::getId).orElse(1L));
     }
 
-    public synchronized void append(String entityType, Long entityId, String action, String actorName, String detail, LocalDateTime createdAt) {
+    public void append(String entityType, Long entityId, String action, String actorName, String detail, LocalDateTime createdAt) {
         WorkflowAuditEntity entity = new WorkflowAuditEntity();
         entity.setId(sequence.incrementAndGet());
         entity.setEntityType(entityType);
@@ -34,7 +36,8 @@ public class AuditEventStore {
         repository.save(entity);
     }
 
-    public synchronized List<AuditView> findAll() {
+    @Transactional(readOnly = true)
+    public List<AuditView> findAll() {
         return repository.findAll(Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id"))).stream()
                 .map(entity -> new AuditView(
                         entity.getId(),
@@ -46,10 +49,6 @@ public class AuditEventStore {
                         entity.getCreatedAt()
                 ))
                 .toList();
-    }
-
-    private void syncSequence() {
-        sequence.set(repository.findTopByOrderByIdDesc().map(WorkflowAuditEntity::getId).orElse(1L));
     }
 
     public record AuditView(Long id, String entityType, Long entityId, String action, String actorName, String detail, LocalDateTime createdAt) {

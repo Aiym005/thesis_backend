@@ -7,34 +7,23 @@ import com.tms.thesissystem.application.service.WorkflowCommandService;
 import com.tms.thesissystem.application.service.WorkflowQueryService;
 import com.tms.thesissystem.domain.UserRole;
 import com.tms.thesissystem.domain.WeeklyTask;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ExceptionHandler;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api")
+@RequiredArgsConstructor
 public class WorkflowCompatibilityController {
     private final WorkflowQueryService queryService;
     private final WorkflowCommandService commandService;
     private final ApiResponseMapper apiResponseMapper;
     private final DatabaseStatusService databaseStatusService;
-
-    public WorkflowCompatibilityController(WorkflowQueryService queryService,
-                                           WorkflowCommandService commandService,
-                                           ApiResponseMapper apiResponseMapper,
-                                           DatabaseStatusService databaseStatusService) {
-        this.queryService = queryService;
-        this.commandService = commandService;
-        this.apiResponseMapper = apiResponseMapper;
-        this.databaseStatusService = databaseStatusService;
-    }
 
     @GetMapping("/dashboard")
     public ApiDtos.DashboardResponse dashboard() {
@@ -143,12 +132,6 @@ public class WorkflowCompatibilityController {
     public ApiDtos.DashboardResponse departmentApprovesPlan(@RequestBody PlanApprovalRequest request) {
         commandService.departmentDecisionOnPlan(request.planId(), request.resolvedActorId(), request.approved(), request.note());
         return apiResponseMapper.toDashboardResponse(queryService.getDashboard());
-    }
-
-    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiDtos.ApiErrorResponse handleDomainError(RuntimeException exception) {
-        return new ApiDtos.ApiErrorResponse(exception.getMessage());
     }
 
     public record StudentTopicProposalRequest(Long studentId, String title, String description, String program) {

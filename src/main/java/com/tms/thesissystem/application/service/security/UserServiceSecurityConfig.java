@@ -20,7 +20,7 @@ public class UserServiceSecurityConfig {
     @Bean
     SecurityFilterChain userServiceSecurityFilterChain(HttpSecurity http,
                                                        JwtAuthenticationFilter jwtAuthenticationFilter,
-                                                       AuthenticationProvider authenticationProvider) throws Exception {
+                                                       AuthenticationProvider authenticationProvider) {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())

@@ -13,15 +13,18 @@ import com.tms.thesissystem.domain.TopicStatus;
 import com.tms.thesissystem.domain.User;
 import com.tms.thesissystem.domain.UserRole;
 import com.tms.thesissystem.domain.WeeklyTask;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
+@Slf4j
 @Service
+@Transactional
+@RequiredArgsConstructor
 public class WorkflowCommandService {
     private static final long STUDENT_OFFSET = 100_000L;
     private static final long TEACHER_OFFSET = 200_000L;
@@ -30,11 +33,6 @@ public class WorkflowCommandService {
 
     private final WorkflowRepository repository;
     private final WorkflowEventPublisher eventPublisher;
-
-    public WorkflowCommandService(WorkflowRepository repository, WorkflowEventPublisher eventPublisher) {
-        this.repository = repository;
-        this.eventPublisher = eventPublisher;
-    }
 
     public Topic proposeTopic(Long studentId, String title, String description, String program) {
         User student = getUser(studentId, UserRole.STUDENT);
@@ -200,7 +198,7 @@ public class WorkflowCommandService {
                 approved ? (topic.getOwnerStudentId() == null ? "Сэдэв нээлттэй жагсаалт руу шилжлээ" : "Сэдэв эцэслэн батлагдлаа") : "Сэдэв тэнхим дээр буцаагдлаа",
                 approved ? (topic.getOwnerStudentId() == null
                         ? "\"" + topic.getTitle() + "\" сэдэв батлагдаж, оюутнуудын сонголтын жагсаалт руу орлоо."
-                        : "\"" + topic.getTitle() + "\" сэдэв батлагдаж, удирдагч багшаар " + advisor.fullName() + " томилогдлоо.")
+                        : "\"" + topic.getTitle() + "\" сэдэв батлагдаж, удирдагч багшаар " + Objects.requireNonNull(advisor).fullName() + " томилогдлоо.")
                         : "\"" + topic.getTitle() + "\" сэдвийг буцаалаа. Тайлбар: " + safeNote(note),
                 recipients));
         return topic;
@@ -292,9 +290,6 @@ public class WorkflowCommandService {
 
     private List<Long> notifyAllStakeholders(Long... explicitUserIds) {
         Set<Long> recipients = new LinkedHashSet<>();
-        recipients.addAll(userIdsByRole(UserRole.STUDENT));
-        recipients.addAll(userIdsByRole(UserRole.TEACHER));
-        recipients.addAll(userIdsByRole(UserRole.DEPARTMENT));
         for (Long explicitUserId : explicitUserIds) {
             if (explicitUserId != null) {
                 recipients.add(explicitUserId);
@@ -303,7 +298,14 @@ public class WorkflowCommandService {
         return List.copyOf(recipients);
     }
 
-    private void publish(WorkflowEvent event) { eventPublisher.publish(event); }
+    private void publish(WorkflowEvent event) {
+        try {
+            eventPublisher.publish(event);
+        } catch (RuntimeException exception) {
+            log.error("Workflow event publish failed. entityType={}, entityId={}, action={}",
+                    event.entityType(), event.entityId(), event.action(), exception);
+        }
+    }
     private User getUser(Long userId, UserRole role) {
         Long resolvedUserId = normalizeUserId(userId, role);
         User user = repository.findUserById(resolvedUserId).orElseThrow(() -> new IllegalArgumentException("Хэрэглэгч олдсонгүй."));
@@ -344,7 +346,7 @@ public class WorkflowCommandService {
         String normalizedTitle = normalize(title);
         String normalizedProgram = normalize(program);
         boolean duplicateExists = repository.findAllTopics().stream()
-                .filter(topic -> excludedTopicId == null || !topic.getId().equals(excludedTopicId))
+                .filter(topic -> !topic.getId().equals(excludedTopicId))
                 .filter(topic -> topic.getStatus() != TopicStatus.DELETED && topic.getStatus() != TopicStatus.SUPERSEDED)
                 .anyMatch(topic -> normalize(topic.getTitle()).equals(normalizedTitle)
                         && normalize(topic.getProgram()).equals(normalizedProgram));
@@ -366,9 +368,7 @@ public class WorkflowCommandService {
         }
         return repository.findAllTopics().stream()
                 .filter(topic -> topic.getStatus() == TopicStatus.APPROVED)
-                .filter(topic -> studentId.equals(topic.getOwnerStudentId()))
-                .sorted((left, right) -> right.getUpdatedAt().compareTo(left.getUpdatedAt()))
-                .findFirst()
+                .filter(topic -> studentId.equals(topic.getOwnerStudentId())).min((left, right) -> right.getUpdatedAt().compareTo(left.getUpdatedAt()))
                 .orElseThrow(() -> new IllegalStateException("Энэ оюутан батлагдсан өөрийн сэдэв дээр л төлөвлөгөө үүсгэнэ."));
     }
 

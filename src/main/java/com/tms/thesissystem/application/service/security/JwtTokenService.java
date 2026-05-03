@@ -64,8 +64,7 @@ public class JwtTokenService {
         try {
             Instant now = Instant.now();
             Map<String, Object> header = Map.of("alg", "HS256", "typ", "JWT");
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.putAll(claims);
+            Map<String, Object> payload = new LinkedHashMap<>(claims);
             payload.put("iat", now.getEpochSecond());
             payload.put("exp", now.plusSeconds(expirationSeconds).getEpochSecond());
 
@@ -90,20 +89,6 @@ public class JwtTokenService {
                 longValue(payload.get("uid")),
                 username,
                 displayName == null ? username : displayName,
-                stringClaim(payload.get("role"))
-        );
-    }
-
-    public ApiDtos.AuthUserDto parsePasswordResetToken(String token) {
-        Map<String, Object> payload = verifyAndDecode(token);
-        Object purpose = payload.get("purpose");
-        if (purpose == null || !PURPOSE_PASSWORD_RESET.equalsIgnoreCase(String.valueOf(purpose))) {
-            throw new BadCredentialsException("Нууц үг сэргээх token биш байна.");
-        }
-        return new ApiDtos.AuthUserDto(
-                longValue(payload.get("uid")),
-                stringClaim(payload.get("sub")),
-                null,
                 stringClaim(payload.get("role"))
         );
     }

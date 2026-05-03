@@ -253,7 +253,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
         topicRepository.save(entity);
 
         if (topic.getOwnerStudentId() != null) {
-            upsertTopicRequest(topic.getId(), decodeUserId(UserRole.STUDENT, topic.getOwnerStudentId()), UserRole.STUDENT, topic.getStatus() != TopicStatus.REJECTED, "Topic workflow request");
+            upsertTopicRequest(topic.getId(), decodeUserId(UserRole.STUDENT, topic.getOwnerStudentId()), topic.getStatus() != TopicStatus.REJECTED);
         }
         return findTopicById(topic.getId()).orElse(topic);
     }
@@ -482,14 +482,14 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
                 .map(TopicEntity::getFields)
                 .map(this::parseJsonMap)
                 .orElseGet(LinkedHashMap::new);
-        List<WeeklyTask> tasks = planWeekRepository.findByPlanIdOrderByWeekNumberAsc(entity.getId()).stream()
+        List<WeeklyTask> tasks = new ArrayList<>(planWeekRepository.findByPlanIdOrderByWeekNumberAsc(entity.getId()).stream()
                 .map(week -> {
                     Map<String, Object> result = parseJsonMap(week.getResult());
                     return new WeeklyTask(week.getWeekNumber(), week.getTask(),
                             stringValue(result.get("deliverable")), stringValue(result.get("focus")));
                 })
-                .toList();
-        List<ApprovalRecord> approvals = planResponseRepository.findByPlanIdOrderByIdAsc(entity.getId()).stream()
+                .toList());
+        List<ApprovalRecord> approvals = new ArrayList<>(planResponseRepository.findByPlanIdOrderByIdAsc(entity.getId()).stream()
                 .map(response -> {
                     ApprovalStage stage = ApprovalStage.valueOf(response.getApproverType());
                     UserRole role = stage == ApprovalStage.TEACHER ? UserRole.TEACHER : UserRole.DEPARTMENT;
@@ -506,7 +506,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
                             localDateTime(response.getResponseDate())
                     );
                 })
-                .toList();
+                .toList());
         long encodedStudentId = encodeUserId(UserRole.STUDENT, entity.getStudentId());
         String studentName = Optional.ofNullable(userIndex.get(encodedStudentId))
                 .map(User::fullName)
@@ -533,14 +533,14 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
         return index;
     }
 
-    private void upsertTopicRequest(Long topicId, Long requestedById, UserRole requestedByType, boolean selected, String note) {
+    private void upsertTopicRequest(Long topicId, Long requestedById, boolean selected) {
         TopicRequestEntity entity = topicRequestRepository.findFirstByTopicIdOrderByIdDesc(topicId).orElseGet(TopicRequestEntity::new);
         entity.setTopicId(topicId);
         entity.setSelected(selected);
-        entity.setRequestNote(note);
-        entity.setRequestText(note);
+        entity.setRequestNote("Topic workflow request");
+        entity.setRequestText("Topic workflow request");
         entity.setRequestedById(requestedById);
-        entity.setRequestedByType(requestedByType.name());
+        entity.setRequestedByType(UserRole.STUDENT.name());
         entity.setSelectedAt(LocalDate.now());
         topicRequestRepository.save(entity);
     }

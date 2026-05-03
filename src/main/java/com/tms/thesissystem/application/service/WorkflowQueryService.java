@@ -7,17 +7,17 @@ import com.tms.thesissystem.domain.Plan;
 import com.tms.thesissystem.domain.Review;
 import com.tms.thesissystem.domain.Topic;
 import com.tms.thesissystem.domain.User;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
+@Transactional(readOnly = true)
+@RequiredArgsConstructor
 public class WorkflowQueryService {
     private final WorkflowRepository repository;
-
-    public WorkflowQueryService(WorkflowRepository repository) {
-        this.repository = repository;
-    }
 
     public DashboardSnapshot getDashboard() {
         List<Topic> topics = repository.findAllTopics();
