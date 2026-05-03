@@ -21,7 +21,7 @@ public class ApiResponseMapper {
         return new ApiDtos.DashboardResponse(
                 snapshot.users().stream().map(this::toUserDto).toList(),
                 snapshot.topics().stream()
-                        .filter(topic -> topic.status() != TopicStatus.DELETED)
+                        .filter(topic -> topic.getStatus() != TopicStatus.DELETED)
                         .map(this::toTopicDto)
                         .toList(),
                 snapshot.plans().stream().map(this::toPlanDto).toList(),
@@ -38,7 +38,7 @@ public class ApiResponseMapper {
 
     public ApiDtos.WorkflowStateResponse toWorkflowStateResponse(WorkflowQueryService.DashboardSnapshot snapshot) {
         List<ApiDtos.TopicDto> topics = snapshot.topics().stream()
-                .filter(topic -> topic.status() != TopicStatus.DELETED)
+                .filter(topic -> topic.getStatus() != TopicStatus.DELETED)
                 .map(this::toTopicDto)
                 .toList();
         List<ApiDtos.PlanDto> plans = snapshot.plans().stream().map(this::toPlanDto).toList();
@@ -69,36 +69,36 @@ public class ApiResponseMapper {
 
     public ApiDtos.TopicDto toTopicDto(Topic topic) {
         return new ApiDtos.TopicDto(
-                topic.id(),
-                topic.title(),
-                topic.description(),
-                topic.program(),
-                topic.proposerId(),
-                topic.proposerName(),
-                topic.proposerRole().name(),
-                topic.ownerStudentId(),
-                topic.ownerStudentName(),
-                topic.advisorTeacherId(),
-                topic.advisorTeacherName(),
-                topic.status().name(),
-                topic.createdAt(),
-                topic.updatedAt(),
-                topic.approvals().stream().map(this::toApprovalRecordDto).toList()
+                topic.getId(),
+                topic.getTitle(),
+                topic.getDescription(),
+                topic.getProgram(),
+                topic.getProposerId(),
+                topic.getProposerName(),
+                topic.getProposerRole().name(),
+                topic.getOwnerStudentId(),
+                topic.getOwnerStudentName(),
+                topic.getAdvisorTeacherId(),
+                topic.getAdvisorTeacherName(),
+                topic.getStatus().name(),
+                topic.getCreatedAt(),
+                topic.getUpdatedAt(),
+                topic.getApprovals().stream().map(this::toApprovalRecordDto).toList()
         );
     }
 
     public ApiDtos.PlanDto toPlanDto(Plan plan) {
         return new ApiDtos.PlanDto(
-                plan.id(),
-                plan.topicId(),
-                plan.topicTitle(),
-                plan.studentId(),
-                plan.studentName(),
-                plan.status().name(),
-                plan.tasks().stream().map(this::toWeeklyTaskDto).toList(),
-                plan.approvals().stream().map(this::toApprovalRecordDto).toList(),
-                plan.createdAt(),
-                plan.updatedAt()
+                plan.getId(),
+                plan.getTopicId(),
+                plan.getTopicTitle(),
+                plan.getStudentId(),
+                plan.getStudentName(),
+                plan.getStatus().name(),
+                plan.getTasks().stream().map(this::toWeeklyTaskDto).toList(),
+                plan.getApprovals().stream().map(this::toApprovalRecordDto).toList(),
+                plan.getCreatedAt(),
+                plan.getUpdatedAt()
         );
     }
 

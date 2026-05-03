@@ -1,9 +1,13 @@
 package com.tms.thesissystem.domain;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
+@AllArgsConstructor
+@Getter
 public class Plan {
     public static final int REQUIRED_WEEKS = 15;
 
@@ -17,20 +21,6 @@ public class Plan {
     private final List<ApprovalRecord> approvals;
     private final LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-
-    public Plan(Long id, Long topicId, String topicTitle, Long studentId, String studentName, PlanStatus status,
-                List<WeeklyTask> tasks, List<ApprovalRecord> approvals, LocalDateTime createdAt, LocalDateTime updatedAt) {
-        this.id = id;
-        this.topicId = topicId;
-        this.topicTitle = topicTitle;
-        this.studentId = studentId;
-        this.studentName = studentName;
-        this.status = status;
-        this.tasks = tasks == null ? new ArrayList<>() : new ArrayList<>(tasks);
-        this.approvals = approvals == null ? new ArrayList<>() : new ArrayList<>(approvals);
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
-    }
 
     public void updateTasks(List<WeeklyTask> updatedTasks, LocalDateTime now) {
         if (status == PlanStatus.PENDING_TEACHER_APPROVAL || status == PlanStatus.PENDING_DEPARTMENT_APPROVAL) {
@@ -81,15 +71,4 @@ public class Plan {
         status = approved ? PlanStatus.APPROVED : PlanStatus.REJECTED;
         updatedAt = now;
     }
-
-    public Long id() { return id; }
-    public Long topicId() { return topicId; }
-    public String topicTitle() { return topicTitle; }
-    public Long studentId() { return studentId; }
-    public String studentName() { return studentName; }
-    public PlanStatus status() { return status; }
-    public List<WeeklyTask> tasks() { return List.copyOf(tasks); }
-    public List<ApprovalRecord> approvals() { return List.copyOf(approvals); }
-    public LocalDateTime createdAt() { return createdAt; }
-    public LocalDateTime updatedAt() { return updatedAt; }
 }

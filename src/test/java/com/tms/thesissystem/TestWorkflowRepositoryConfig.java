@@ -128,9 +128,9 @@ public class TestWorkflowRepositoryConfig {
                     )
             );
 
-            topics.put(approvedCatalogTopicA.id(), approvedCatalogTopicA);
-            topics.put(approvedCatalogTopicB.id(), approvedCatalogTopicB);
-            topics.put(approvedStudentTopic.id(), approvedStudentTopic);
+            topics.put(approvedCatalogTopicA.getId(), approvedCatalogTopicA);
+            topics.put(approvedCatalogTopicB.getId(), approvedCatalogTopicB);
+            topics.put(approvedStudentTopic.getId(), approvedStudentTopic);
 
             List<WeeklyTask> fixtureTasks = java.util.stream.IntStream.rangeClosed(1, 15)
                     .mapToObj(week -> new WeeklyTask(week, "Week " + week, "Deliverable " + week, "Focus " + week))
@@ -138,8 +138,8 @@ public class TestWorkflowRepositoryConfig {
 
             Plan approvedPlan = new Plan(
                     1L,
-                    approvedStudentTopic.id(),
-                    approvedStudentTopic.title(),
+                    approvedStudentTopic.getId(),
+                    approvedStudentTopic.getTitle(),
                     student.id(),
                     student.fullName(),
                     PlanStatus.APPROVED,
@@ -152,10 +152,10 @@ public class TestWorkflowRepositoryConfig {
                     now.minusDays(6)
             );
 
-            plans.put(approvedPlan.id(), approvedPlan);
-            reviews.put(1L, new Review(1L, approvedPlan.id(), 4, teacherA.id(), teacherA.fullName(), 92, "Судалгааны хэсэг сайн.", now.minusDays(1)));
+            plans.put(approvedPlan.getId(), approvedPlan);
+            reviews.put(1L, new Review(1L, approvedPlan.getId(), 4, teacherA.id(), teacherA.fullName(), 92, "Судалгааны хэсэг сайн.", now.minusDays(1)));
             notifications.put(1L, new Notification(1L, student.id(), "Төлөвлөгөө батлагдсан", "15 долоо хоногийн төлөвлөгөөг тэнхим баталгаажууллаа.", now.minusHours(6)));
-            audits.put(1L, new AuditEntry(1L, "PLAN", approvedPlan.id(), "PLAN_APPROVED", department.fullName(), "Тэнхим төлөвлөгөөг эцэслэн баталлаа.", now.minusHours(6)));
+            audits.put(1L, new AuditEntry(1L, "PLAN", approvedPlan.getId(), "PLAN_APPROVED", department.fullName(), "Тэнхим төлөвлөгөөг эцэслэн баталлаа.", now.minusHours(6)));
         }
 
         @Override
@@ -177,11 +177,14 @@ public class TestWorkflowRepositoryConfig {
         }
 
         @Override
-        public User createUserAccount(String username, UserRole role) {
+        public User createUserAccount(String username, UserRole role, String firstName, String lastName, String phoneNumber) {
+            String resolvedFirstName = (firstName == null || firstName.isBlank()) ? username : firstName;
+            String resolvedLastName = (lastName == null || lastName.isBlank()) ? "User" : lastName;
+            String resolvedPhoneNumber = (phoneNumber == null || phoneNumber.isBlank()) ? username : phoneNumber;
             User createdUser = switch (role) {
-                case STUDENT -> new User(studentSequence.getAndIncrement(), role, username, username, "User", username + "@tms.mn", DEPARTMENT_NAME, PROGRAM);
-                case TEACHER -> new User(teacherSequence.getAndIncrement(), role, username, username, "Teacher", username, DEPARTMENT_NAME, PROGRAM);
-                case DEPARTMENT -> new User(departmentSequence.getAndIncrement(), role, username, username, "Department", username + "@tms.mn", DEPARTMENT_NAME, PROGRAM);
+                case STUDENT -> new User(studentSequence.getAndIncrement(), role, username, resolvedFirstName, resolvedLastName, username + "@tms.mn", DEPARTMENT_NAME, PROGRAM);
+                case TEACHER -> new User(teacherSequence.getAndIncrement(), role, username, resolvedFirstName, resolvedLastName, resolvedPhoneNumber, DEPARTMENT_NAME, PROGRAM);
+                case DEPARTMENT -> new User(departmentSequence.getAndIncrement(), role, username, resolvedFirstName, resolvedLastName, username + "@tms.mn", DEPARTMENT_NAME, PROGRAM);
             };
             users.put(createdUser.id(), createdUser);
             return createdUser;
@@ -194,7 +197,7 @@ public class TestWorkflowRepositoryConfig {
 
         @Override
         public List<Topic> findAllTopics() {
-            return topics.values().stream().sorted(Comparator.comparing(Topic::updatedAt).reversed()).toList();
+            return topics.values().stream().sorted(Comparator.comparing(Topic::getUpdatedAt).reversed()).toList();
         }
 
         @Override
@@ -204,7 +207,7 @@ public class TestWorkflowRepositoryConfig {
 
         @Override
         public Topic saveTopic(Topic topic) {
-            topics.put(topic.id(), topic);
+            topics.put(topic.getId(), topic);
             return topic;
         }
 
@@ -215,7 +218,7 @@ public class TestWorkflowRepositoryConfig {
 
         @Override
         public List<Plan> findAllPlans() {
-            return plans.values().stream().sorted(Comparator.comparing(Plan::updatedAt).reversed()).toList();
+            return plans.values().stream().sorted(Comparator.comparing(Plan::getUpdatedAt).reversed()).toList();
         }
 
         @Override
@@ -225,12 +228,12 @@ public class TestWorkflowRepositoryConfig {
 
         @Override
         public Optional<Plan> findPlanByStudentId(Long studentId) {
-            return plans.values().stream().filter(plan -> plan.studentId().equals(studentId)).findFirst();
+            return plans.values().stream().filter(plan -> plan.getStudentId().equals(studentId)).findFirst();
         }
 
         @Override
         public Plan savePlan(Plan plan) {
-            plans.put(plan.id(), plan);
+            plans.put(plan.getId(), plan);
             return plan;
         }
 

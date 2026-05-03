@@ -217,7 +217,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
         Map<Long, User> userIndex = indexUsers(findAllUsers());
         return topicRepository.findAll(Sort.by(Sort.Direction.DESC, "id")).stream()
                 .map(entity -> mapTopic(entity, userIndex))
-                .sorted(Comparator.comparing(Topic::updatedAt).reversed())
+                .sorted(Comparator.comparing(Topic::getUpdatedAt).reversed())
                 .toList();
     }
 
@@ -233,29 +233,29 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
 
     @Override
     public synchronized Topic saveTopic(Topic topic) {
-        TopicEntity entity = topicRepository.findById(topic.id()).orElseGet(TopicEntity::new);
-        entity.setId(topic.id());
-        entity.setCreatedAt(topic.createdAt().toLocalDate());
-        entity.setCreatedById(decodeUserId(topic.proposerRole(), topic.proposerId()));
-        entity.setCreatedByType(topic.proposerRole().name());
+        TopicEntity entity = topicRepository.findById(topic.getId()).orElseGet(TopicEntity::new);
+        entity.setId(topic.getId());
+        entity.setCreatedAt(topic.getCreatedAt().toLocalDate());
+        entity.setCreatedById(decodeUserId(topic.getProposerRole(), topic.getProposerId()));
+        entity.setCreatedByType(topic.getProposerRole().name());
         entity.setFields(json(payload(
-                topic.title(),
-                topic.description(),
-                decodeNullableUserId(UserRole.STUDENT, topic.ownerStudentId()),
-                topic.ownerStudentName(),
-                decodeNullableUserId(UserRole.TEACHER, topic.advisorTeacherId()),
-                topic.advisorTeacherName(),
-                topic.approvals()
+                topic.getTitle(),
+                topic.getDescription(),
+                decodeNullableUserId(UserRole.STUDENT, topic.getOwnerStudentId()),
+                topic.getOwnerStudentName(),
+                decodeNullableUserId(UserRole.TEACHER, topic.getAdvisorTeacherId()),
+                topic.getAdvisorTeacherName(),
+                topic.getApprovals()
         )));
         entity.setFormId(null);
-        entity.setProgram(topic.program());
-        entity.setStatus(topic.status().name());
+        entity.setProgram(topic.getProgram());
+        entity.setStatus(topic.getStatus().name());
         topicRepository.save(entity);
 
-        if (topic.ownerStudentId() != null) {
-            upsertTopicRequest(topic.id(), decodeUserId(UserRole.STUDENT, topic.ownerStudentId()), UserRole.STUDENT, topic.status() != TopicStatus.REJECTED, "Topic workflow request");
+        if (topic.getOwnerStudentId() != null) {
+            upsertTopicRequest(topic.getId(), decodeUserId(UserRole.STUDENT, topic.getOwnerStudentId()), UserRole.STUDENT, topic.getStatus() != TopicStatus.REJECTED, "Topic workflow request");
         }
-        return findTopicById(topic.id()).orElse(topic);
+        return findTopicById(topic.getId()).orElse(topic);
     }
 
     @Override
@@ -269,7 +269,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
         Map<Long, User> userIndex = indexUsers(findAllUsers());
         return planRepository.findAll(Sort.by(Sort.Direction.DESC, "id")).stream()
                 .map(entity -> mapPlan(entity, userIndex))
-                .sorted(Comparator.comparing(Plan::updatedAt).reversed())
+                .sorted(Comparator.comparing(Plan::getUpdatedAt).reversed())
                 .toList();
     }
 
@@ -297,18 +297,18 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
 
     @Override
     public synchronized Plan savePlan(Plan plan) {
-        PlanEntity entity = planRepository.findById(plan.id()).orElseGet(PlanEntity::new);
-        entity.setId(plan.id());
-        entity.setTopicId(plan.topicId());
-        entity.setStudentId(decodeUserId(UserRole.STUDENT, plan.studentId()));
-        entity.setStatus(plan.status().name());
-        entity.setCreatedAt(plan.createdAt().toLocalDate());
+        PlanEntity entity = planRepository.findById(plan.getId()).orElseGet(PlanEntity::new);
+        entity.setId(plan.getId());
+        entity.setTopicId(plan.getTopicId());
+        entity.setStudentId(decodeUserId(UserRole.STUDENT, plan.getStudentId()));
+        entity.setStatus(plan.getStatus().name());
+        entity.setCreatedAt(plan.getCreatedAt().toLocalDate());
         planRepository.save(entity);
 
-        planWeekRepository.deleteByPlanId(plan.id());
-        for (WeeklyTask task : plan.tasks()) {
+        planWeekRepository.deleteByPlanId(plan.getId());
+        for (WeeklyTask task : plan.getTasks()) {
             PlanWeekEntity weekEntity = new PlanWeekEntity();
-            weekEntity.setPlanId(plan.id());
+            weekEntity.setPlanId(plan.getId());
             weekEntity.setWeekNumber(task.week());
             weekEntity.setTask(task.title());
             weekEntity.setResult(json(Map.of(
@@ -317,7 +317,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
             )));
             planWeekRepository.save(weekEntity);
         }
-        return findPlanById(plan.id()).orElse(plan);
+        return findPlanById(plan.getId()).orElse(plan);
     }
 
     @Override
@@ -571,16 +571,16 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
     private void reconcileApprovedTopicsPerStudent() {
         Map<Long, List<Topic>> approvedTopicsByStudent = new LinkedHashMap<>();
         for (Topic topic : findAllTopics()) {
-            if (topic.status() != TopicStatus.APPROVED || topic.ownerStudentId() == null) {
+            if (topic.getStatus() != TopicStatus.APPROVED || topic.getOwnerStudentId() == null) {
                 continue;
             }
-            approvedTopicsByStudent.computeIfAbsent(topic.ownerStudentId(), ignored -> new ArrayList<>()).add(topic);
+            approvedTopicsByStudent.computeIfAbsent(topic.getOwnerStudentId(), ignored -> new ArrayList<>()).add(topic);
         }
         approvedTopicsByStudent.values().forEach(topics -> {
             if (topics.size() < 2) {
                 return;
             }
-            topics.sort(Comparator.comparing(Topic::id).reversed());
+            topics.sort(Comparator.comparing(Topic::getId).reversed());
             topics.stream().skip(1).forEach(topic -> {
                 topic.supersede(LocalDateTime.now());
                 saveTopic(topic);

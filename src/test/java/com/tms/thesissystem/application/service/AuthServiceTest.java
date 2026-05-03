@@ -119,14 +119,14 @@ class AuthServiceTest {
     @Test
     void registersUserDirectlyIntoAuthStore() {
         when(authAccountStore.findByUsername("new-user")).thenReturn(Optional.empty());
-        when(workflowRepository.createUserAccount("new-user", UserRole.STUDENT))
-                .thenReturn(new User(900001L, UserRole.STUDENT, "new-user", "new-user", "User", "new-user@tms.mn", "Software Engineering", "B.SE"));
+        when(workflowRepository.createUserAccount("new-user", UserRole.STUDENT, "new", "user", "99112233"))
+                .thenReturn(new User(900001L, UserRole.STUDENT, "new-user", "new", "user", "new-user@tms.mn", "Software Engineering", "B.SE"));
 
-        ApiDtos.RegistrationResponse response = authService.register("new-user", "secret1", "secret1");
+        ApiDtos.RegistrationResponse response = authService.register("new-user", "secret1", "secret1", "new", "user", "99112233");
 
         assertThat(response.ok()).isTrue();
         assertThat(response.username()).isEqualTo("new-user");
-        verify(authAccountStore).save(eq(900001L), eq("new-user"), anyString(), eq("student"), eq("new-user"));
+        verify(authAccountStore).save(eq(900001L), eq("new-user"), anyString(), eq("student"), eq("new user"));
     }
 
 }

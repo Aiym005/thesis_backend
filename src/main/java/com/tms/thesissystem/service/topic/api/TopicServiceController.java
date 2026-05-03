@@ -109,11 +109,11 @@ public class TopicServiceController {
         Long topicId = request.topicId();
         if (topicId == null) {
             topicId = queryService.getDashboard().topics().stream()
-                    .filter(topic -> topic.status() == TopicStatus.PENDING_TEACHER_APPROVAL)
-                    .filter(topic -> request.topicTitle() != null && request.topicTitle().equalsIgnoreCase(topic.title()))
+                    .filter(topic -> topic.getStatus() == TopicStatus.PENDING_TEACHER_APPROVAL)
+                    .filter(topic -> request.topicTitle() != null && request.topicTitle().equalsIgnoreCase(topic.getTitle()))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Сэдэв олдсонгүй."))
-                    .id();
+                    .getId();
         }
         return new ApiDtos.TopicActionResponse(
                 apiResponseMapper.toTopicDto(commandService.teacherDecisionOnTopic(

@@ -11,7 +11,6 @@ import org.springframework.context.annotation.ComponentScan;
                 "org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration"
         }
 )
-@ComponentScan(basePackageClasses = ApiGatewayApplication.class)
 public class ApiGatewayApplication {
     public static void main(String[] args) {
         SpringApplication app = new SpringApplication(ApiGatewayApplication.class);

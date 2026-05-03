@@ -31,8 +31,8 @@ public class WorkflowQueryService {
                 repository.findAllNotifications(),
                 repository.findAllAuditEntries(),
                 new Summary(
-                        topics.stream().filter(topic -> topic.status().name().startsWith("PENDING")).count(),
-                        plans.stream().filter(plan -> plan.status().name().startsWith("PENDING")).count(),
+                        topics.stream().filter(topic -> topic.getStatus().name().startsWith("PENDING")).count(),
+                        plans.stream().filter(plan -> plan.getStatus().name().startsWith("PENDING")).count(),
                         reviews.size()
                 )
         );

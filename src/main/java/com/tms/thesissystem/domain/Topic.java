@@ -1,11 +1,12 @@
 package com.tms.thesissystem.domain;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
+@AllArgsConstructor
 @Getter
 public class Topic {
     private final Long id;
@@ -23,27 +24,6 @@ public class Topic {
     private final LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private final List<ApprovalRecord> approvals;
-
-    public Topic(Long id, String title, String description, String program, Long proposerId, String proposerName,
-                 UserRole proposerRole, Long ownerStudentId, String ownerStudentName, Long advisorTeacherId,
-                 String advisorTeacherName, TopicStatus status, LocalDateTime createdAt, LocalDateTime updatedAt,
-                 List<ApprovalRecord> approvals) {
-        this.id = id;
-        this.title = title;
-        this.description = description;
-        this.program = program;
-        this.proposerId = proposerId;
-        this.proposerName = proposerName;
-        this.proposerRole = proposerRole;
-        this.ownerStudentId = ownerStudentId;
-        this.ownerStudentName = ownerStudentName;
-        this.advisorTeacherId = advisorTeacherId;
-        this.advisorTeacherName = advisorTeacherName;
-        this.status = status;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
-        this.approvals = approvals == null ? new ArrayList<>() : new ArrayList<>(approvals);
-    }
 
     public static Topic teacherCatalogTopic(Long id, String title, String description, String program, User teacher, LocalDateTime now) {
         return new Topic(id, title, description, program, teacher.id(), teacher.fullName(), teacher.role(),
@@ -154,20 +134,4 @@ public class Topic {
         status = TopicStatus.DELETED;
         updatedAt = now;
     }
-
-    public Long id() { return id; }
-    public String title() { return title; }
-    public String description() { return description; }
-    public String program() { return program; }
-    public Long proposerId() { return proposerId; }
-    public String proposerName() { return proposerName; }
-    public UserRole proposerRole() { return proposerRole; }
-    public Long ownerStudentId() { return ownerStudentId; }
-    public String ownerStudentName() { return ownerStudentName; }
-    public Long advisorTeacherId() { return advisorTeacherId; }
-    public String advisorTeacherName() { return advisorTeacherName; }
-    public TopicStatus status() { return status; }
-    public LocalDateTime createdAt() { return createdAt; }
-    public LocalDateTime updatedAt() { return updatedAt; }
-    public List<ApprovalRecord> approvals() { return List.copyOf(approvals); }
 }
