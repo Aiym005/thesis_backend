@@ -122,6 +122,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
                     student.getFirstName(),
                     student.getLastName(),
                     student.getMail(),
+                    student.getPhoneNumber(),
                     department == null ? null : department.getName(),
                     student.getProgram()
             ));
@@ -135,6 +136,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
                     teacher.getFirstName(),
                     teacher.getLastName(),
                     teacher.getMail(),
+                    teacher.getPhoneNumber(),
                     department == null ? null : department.getName(),
                     "B.SE"
             ));
@@ -147,6 +149,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
                     department.getName(),
                     "Department",
                     department.getAdmin() + "@tms.mn",
+                    null,
                     department.getName(),
                     "B.SE"
             ));
@@ -182,7 +185,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
                 student.setChoosed(false);
                 student.setProposedNumber(0);
                 StudentEntity saved = studentRepository.save(student);
-                yield new User(encodeUserId(UserRole.STUDENT, saved.getId()), UserRole.STUDENT, username, firstName, lastName, username + "@tms.mn", SOFTWARE_ENGINEERING, "B.SE");
+                yield new User(encodeUserId(UserRole.STUDENT, saved.getId()), UserRole.STUDENT, username, firstName, lastName, username + "@tms.mn", phoneNumber, SOFTWARE_ENGINEERING, "B.SE");
             }
             case TEACHER -> {
                 TeacherEntity teacher = new TeacherEntity();
@@ -193,7 +196,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
                 teacher.setPhoneNumber(phoneNumber);
                 teacher.setNumberOfChoosedStudents(0);
                 TeacherEntity saved = teacherRepository.save(teacher);
-                yield new User(encodeUserId(UserRole.TEACHER, saved.getId()), UserRole.TEACHER, teacherLoginId(saved.getId()), firstName, lastName, username + "@tms.mn", SOFTWARE_ENGINEERING, "B.SE");
+                yield new User(encodeUserId(UserRole.TEACHER, saved.getId()), UserRole.TEACHER, teacherLoginId(saved.getId()), firstName, lastName, username + "@tms.mn", phoneNumber, SOFTWARE_ENGINEERING, "B.SE");
             }
             case DEPARTMENT -> {
                 DepartmentEntity department = new DepartmentEntity();
@@ -201,7 +204,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
                 department.setPrograms("[\"B.SE\"]");
                 department.setAdmin(username);
                 DepartmentEntity saved = departmentRepository.save(department);
-                yield new User(encodeUserId(UserRole.DEPARTMENT, saved.getId()), UserRole.DEPARTMENT, username, username, "Department", username + "@tms.mn", username, "B.SE");
+                yield new User(encodeUserId(UserRole.DEPARTMENT, saved.getId()), UserRole.DEPARTMENT, username, username, "Department", username + "@tms.mn", null, username, "B.SE");
             }
         };
     }
@@ -473,7 +476,7 @@ public class PostgresWorkflowRepository implements WorkflowRepository {
                 status,
                 localDateTime(entity.getCreatedAt()),
                 localDateTime(entity.getCreatedAt()),
-                mapApprovals(fields.get("approvals"))
+                new ArrayList<>(mapApprovals(fields.get("approvals")))
         );
     }
 

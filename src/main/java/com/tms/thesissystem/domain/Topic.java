@@ -4,10 +4,11 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
-@AllArgsConstructor
 @Getter
+@AllArgsConstructor
 public class Topic {
     private final Long id;
     private String title;
@@ -27,17 +28,17 @@ public class Topic {
 
     public static Topic teacherCatalogTopic(Long id, String title, String description, String program, User teacher, LocalDateTime now) {
         return new Topic(id, title, description, program, teacher.id(), teacher.fullName(), teacher.role(),
-                null, null, teacher.id(), teacher.fullName(), TopicStatus.PENDING_DEPARTMENT_APPROVAL, now, now, List.of());
+                null, null, null, null, TopicStatus.PENDING_DEPARTMENT_APPROVAL, now, now, new ArrayList<>());
     }
 
     public static Topic studentProposal(Long id, String title, String description, String program, User student, LocalDateTime now) {
         return new Topic(id, title, description, program, student.id(), student.fullName(), student.role(),
-                student.id(), student.fullName(), null, null, TopicStatus.PENDING_TEACHER_APPROVAL, now, now, List.of());
+                student.id(), student.fullName(), null, null, TopicStatus.PENDING_TEACHER_APPROVAL, now, now, new ArrayList<>());
     }
 
     public static Topic departmentCatalogTopic(Long id, String title, String description, String program, User department, LocalDateTime now) {
         return new Topic(id, title, description, program, department.id(), department.fullName(), department.role(),
-                null, null, null, null, TopicStatus.AVAILABLE, now, now, List.of());
+                null, null, null, null, TopicStatus.AVAILABLE, now, now, new ArrayList<>());
     }
 
     public void claim(User student, LocalDateTime now) {
@@ -46,6 +47,10 @@ public class Topic {
         }
         ownerStudentId = student.id();
         ownerStudentName = student.fullName();
+        if (proposerRole == UserRole.TEACHER && proposerId != null && proposerName != null && !proposerName.isBlank()) {
+            advisorTeacherId = proposerId;
+            advisorTeacherName = proposerName;
+        }
         status = TopicStatus.PENDING_TEACHER_APPROVAL;
         updatedAt = now;
     }
@@ -72,6 +77,8 @@ public class Topic {
         approvals.add(new ApprovalRecord(ApprovalStage.DEPARTMENT, departmentUser.id(), departmentUser.fullName(), approved, note, now));
         if (approved) {
             if (ownerStudentId == null) {
+                this.advisorTeacherId = null;
+                this.advisorTeacherName = null;
                 this.status = TopicStatus.AVAILABLE;
                 updatedAt = now;
                 return;
@@ -104,6 +111,8 @@ public class Topic {
     private void releaseToCatalog() {
         ownerStudentId = null;
         ownerStudentName = null;
+        advisorTeacherId = null;
+        advisorTeacherName = null;
         status = TopicStatus.AVAILABLE;
     }
 

@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,9 +39,9 @@ class WorkflowCommandServiceTest {
     private final WorkflowEventPublisher eventPublisher = mock(WorkflowEventPublisher.class);
     private final WorkflowCommandService service = new WorkflowCommandService(repository, eventPublisher);
 
-    private final User student = new User(STUDENT_ID, UserRole.STUDENT, "22b1num0027", "Ану", "Бат-Эрдэнэ", "anu.bat-erdene@tms.mn", "Software Engineering", "SE");
-    private final User teacher = new User(TEACHER_ID, UserRole.TEACHER, "tch001", "Энх", "Сүрэн", "enkh.suren@tms.mn", "Software Engineering", "SE");
-    private final User department = new User(DEPARTMENT_ID, UserRole.DEPARTMENT, "sisi-admin", "Dept", "Admin", "dept@example.com", "Software Engineering", "B.SE");
+    private final User student = new User(STUDENT_ID, UserRole.STUDENT, "22b1num0027", "Ану", "Бат-Эрдэнэ", "anu.bat-erdene@tms.mn", "99000001", "Software Engineering", "SE");
+    private final User teacher = new User(TEACHER_ID, UserRole.TEACHER, "tch001", "Энх", "Сүрэн", "enkh.suren@tms.mn", "99000002", "Software Engineering", "SE");
+    private final User department = new User(DEPARTMENT_ID, UserRole.DEPARTMENT, "sisi-admin", "Dept", "Admin", "dept@example.com", null, "Software Engineering", "B.SE");
 
     @BeforeEach
     void setUp() {
@@ -59,30 +60,30 @@ class WorkflowCommandServiceTest {
 
         Topic topic = service.proposeTopic(1L, "AI Thesis", "Desc", "SE");
 
-        assertThat(topic.id()).isEqualTo(1L);
-        assertThat(topic.status()).isEqualTo(TopicStatus.PENDING_TEACHER_APPROVAL);
+        assertThat(topic.getId()).isEqualTo(1L);
+        assertThat(topic.getStatus()).isEqualTo(TopicStatus.PENDING_TEACHER_APPROVAL);
         verify(repository).saveTopic(topic);
         WorkflowEvent event = capturedEvent();
         assertThat(event.action()).isEqualTo("TOPIC_PROPOSED");
-        assertThat(event.recipientIds()).containsExactly(TEACHER_ID, STUDENT_ID);
+        assertThat(event.recipientIds()).containsExactly(STUDENT_ID);
     }
 
     @Test
     void departmentApprovalAssignsAdvisorAndSupersedesPreviousTopics() {
         Topic pendingTopic = new Topic(10L, "Chosen Topic", "Desc", "SE", STUDENT_ID, student.fullName(), UserRole.STUDENT,
                 STUDENT_ID, student.fullName(), null, null, TopicStatus.PENDING_DEPARTMENT_APPROVAL, now(), now(),
-                List.of(new ApprovalRecord(ApprovalStage.TEACHER, TEACHER_ID, teacher.fullName(), true, "ok", now())));
+                new ArrayList<>(List.of(new ApprovalRecord(ApprovalStage.TEACHER, TEACHER_ID, teacher.fullName(), true, "ok", now()))));
         Topic previousTopic = new Topic(11L, "Old Topic", "Desc", "SE", STUDENT_ID, student.fullName(), UserRole.STUDENT,
-                STUDENT_ID, student.fullName(), TEACHER_ID, teacher.fullName(), TopicStatus.APPROVED, now(), now(), List.of());
+                STUDENT_ID, student.fullName(), TEACHER_ID, teacher.fullName(), TopicStatus.APPROVED, now(), now(), new ArrayList<>());
 
         when(repository.findTopicById(10L)).thenReturn(Optional.of(pendingTopic));
         when(repository.findAllTopics()).thenReturn(List.of(pendingTopic, previousTopic));
 
         Topic result = service.departmentDecisionOnTopic(10L, 1L, true, 1L, "approved");
 
-        assertThat(result.status()).isEqualTo(TopicStatus.APPROVED);
-        assertThat(result.advisorTeacherId()).isEqualTo(TEACHER_ID);
-        assertThat(previousTopic.status()).isEqualTo(TopicStatus.SUPERSEDED);
+        assertThat(result.getStatus()).isEqualTo(TopicStatus.APPROVED);
+        assertThat(result.getAdvisorTeacherId()).isEqualTo(TEACHER_ID);
+        assertThat(previousTopic.getStatus()).isEqualTo(TopicStatus.SUPERSEDED);
         WorkflowEvent event = capturedEvent();
         assertThat(event.action()).isEqualTo("TOPIC_FINALIZED");
         assertThat(event.recipientIds()).containsExactly(DEPARTMENT_ID, STUDENT_ID, TEACHER_ID);
@@ -91,7 +92,7 @@ class WorkflowCommandServiceTest {
     @Test
     void savePlanUsesLatestApprovedTopicWhenRequestedTopicMissing() {
         Topic approvedTopic = new Topic(22L, "Approved Topic", "Desc", "SE", STUDENT_ID, student.fullName(), UserRole.STUDENT,
-                STUDENT_ID, student.fullName(), TEACHER_ID, teacher.fullName(), TopicStatus.APPROVED, now().minusDays(1), now(), List.of());
+                STUDENT_ID, student.fullName(), TEACHER_ID, teacher.fullName(), TopicStatus.APPROVED, now().minusDays(1), now(), new ArrayList<>());
         List<WeeklyTask> tasks = weeklyTasks(15);
 
         when(repository.findTopicById(999L)).thenReturn(Optional.empty());
@@ -101,9 +102,9 @@ class WorkflowCommandServiceTest {
 
         Plan plan = service.savePlan(1L, null, tasks);
 
-        assertThat(plan.id()).isEqualTo(50L);
-        assertThat(plan.topicId()).isEqualTo(22L);
-        assertThat(plan.tasks()).hasSize(15);
+        assertThat(plan.getId()).isEqualTo(50L);
+        assertThat(plan.getTopicId()).isEqualTo(22L);
+        assertThat(plan.getTasks()).hasSize(15);
         WorkflowEvent event = capturedEvent();
         assertThat(event.action()).isEqualTo("PLAN_SAVED");
         assertThat(event.recipientIds()).containsExactly(STUDENT_ID, TEACHER_ID);
@@ -113,7 +114,7 @@ class WorkflowCommandServiceTest {
     void updateRejectedTopicResetsStatusAndClearsPreviousApprovals() {
         Topic rejectedTopic = new Topic(12L, "Rejected Topic", "Desc", "SE", STUDENT_ID, student.fullName(), UserRole.STUDENT,
                 STUDENT_ID, student.fullName(), null, null, TopicStatus.REJECTED, now(), now(),
-                List.of(new ApprovalRecord(ApprovalStage.TEACHER, TEACHER_ID, teacher.fullName(), false, "revise", now())));
+                new ArrayList<>(List.of(new ApprovalRecord(ApprovalStage.TEACHER, TEACHER_ID, teacher.fullName(), false, "revise", now()))));
 
         when(repository.findTopicById(12L)).thenReturn(Optional.of(rejectedTopic));
         when(repository.findAllTopics()).thenReturn(List.of(rejectedTopic));
@@ -121,8 +122,8 @@ class WorkflowCommandServiceTest {
 
         Topic updated = service.updateStudentTopic(12L, 1L, "Retried Topic", "Updated", "SE");
 
-        assertThat(updated.status()).isEqualTo(TopicStatus.PENDING_TEACHER_APPROVAL);
-        assertThat(updated.approvals()).isEmpty();
+        assertThat(updated.getStatus()).isEqualTo(TopicStatus.PENDING_TEACHER_APPROVAL);
+        assertThat(updated.getApprovals()).isEmpty();
     }
 
     @Test
@@ -132,7 +133,7 @@ class WorkflowCommandServiceTest {
                 List.of(new ApprovalRecord(ApprovalStage.TEACHER, TEACHER_ID, teacher.fullName(), false, "fix it", now())),
                 now(), now());
         Topic topic = new Topic(41L, "Approved Topic", "Desc", "SE", STUDENT_ID, student.fullName(), UserRole.STUDENT,
-                STUDENT_ID, student.fullName(), TEACHER_ID, teacher.fullName(), TopicStatus.APPROVED, now(), now(), List.of());
+                STUDENT_ID, student.fullName(), TEACHER_ID, teacher.fullName(), TopicStatus.APPROVED, now(), now(), new ArrayList<>());
 
         when(repository.findPlanById(31L)).thenReturn(Optional.of(rejectedPlan));
         when(repository.findTopicById(41L)).thenReturn(Optional.of(topic));
@@ -141,15 +142,15 @@ class WorkflowCommandServiceTest {
 
         Plan submitted = service.submitPlan(31L, 1L);
 
-        assertThat(submitted.status()).isEqualTo(PlanStatus.PENDING_TEACHER_APPROVAL);
-        assertThat(submitted.approvals()).isEmpty();
+        assertThat(submitted.getStatus()).isEqualTo(PlanStatus.PENDING_TEACHER_APPROVAL);
+        assertThat(submitted.getApprovals()).isEmpty();
     }
 
     @Test
     void submitPlanRequiresAdvisorAssignment() {
         Plan plan = new Plan(31L, 41L, "Approved Topic", STUDENT_ID, student.fullName(), PlanStatus.DRAFT, weeklyTasks(15), List.of(), now(), now());
         Topic topic = new Topic(41L, "Approved Topic", "Desc", "SE", STUDENT_ID, student.fullName(), UserRole.STUDENT,
-                STUDENT_ID, student.fullName(), null, null, TopicStatus.APPROVED, now(), now(), List.of());
+                STUDENT_ID, student.fullName(), null, null, TopicStatus.APPROVED, now(), now(), new ArrayList<>());
 
         when(repository.findPlanById(31L)).thenReturn(Optional.of(plan));
         when(repository.findTopicById(41L)).thenReturn(Optional.of(topic));
@@ -163,7 +164,7 @@ class WorkflowCommandServiceTest {
     void teacherDecisionOnPlanRejectsNonAdvisor() {
         Plan plan = new Plan(31L, 41L, "Approved Topic", STUDENT_ID, student.fullName(), PlanStatus.PENDING_TEACHER_APPROVAL, weeklyTasks(15), List.of(), now(), now());
         Topic topic = new Topic(41L, "Approved Topic", "Desc", "SE", STUDENT_ID, student.fullName(), UserRole.STUDENT,
-                STUDENT_ID, student.fullName(), 200099L, "Another Teacher", TopicStatus.APPROVED, now(), now(), List.of());
+                STUDENT_ID, student.fullName(), 200099L, "Another Teacher", TopicStatus.APPROVED, now(), now(), new ArrayList<>());
 
         when(repository.findPlanById(31L)).thenReturn(Optional.of(plan));
         when(repository.findTopicById(41L)).thenReturn(Optional.of(topic));

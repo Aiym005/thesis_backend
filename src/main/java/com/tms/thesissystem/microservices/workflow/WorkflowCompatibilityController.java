@@ -9,6 +9,7 @@ import com.tms.thesissystem.domain.UserRole;
 import com.tms.thesissystem.domain.WeeklyTask;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,6 +41,11 @@ public class WorkflowCompatibilityController {
         return queryService.getDashboard().users().stream()
                 .map(apiResponseMapper::toUserDto)
                 .toList();
+    }
+
+    @GetMapping("/students/{studentId}/workspace")
+    public ApiDtos.StudentWorkspaceResponse studentWorkspace(@PathVariable Long studentId) {
+        return apiResponseMapper.toStudentWorkspaceResponse(queryService.getStudentWorkspace(studentId));
     }
 
     @GetMapping("/system/database")

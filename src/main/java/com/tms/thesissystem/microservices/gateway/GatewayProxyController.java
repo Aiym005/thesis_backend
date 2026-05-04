@@ -14,6 +14,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -81,6 +82,11 @@ public class GatewayProxyController {
     @GetMapping("/api/verification/state")
     public ResponseEntity<String> verificationState() throws IOException, InterruptedException {
         return proxy(HttpMethod.GET, workflowUrl("/api/verification/state"), null);
+    }
+
+    @GetMapping("/api/students/{studentId}/workspace")
+    public ResponseEntity<String> studentWorkspace(@PathVariable Long studentId) throws IOException, InterruptedException {
+        return proxy(HttpMethod.GET, workflowUrl("/api/students/" + studentId + "/workspace"), null);
     }
 
     @GetMapping("/api/verification/users")

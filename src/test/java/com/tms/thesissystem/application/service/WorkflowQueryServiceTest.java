@@ -13,6 +13,7 @@ import com.tms.thesissystem.domain.UserRole;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,11 +28,11 @@ class WorkflowQueryServiceTest {
     @Test
     void aggregatesDashboardDataAndPendingCounts() {
         LocalDateTime now = LocalDateTime.now();
-        User user = new User(100001L, UserRole.STUDENT, "22b1num0027", "Ану", "Бат-Эрдэнэ", "anu.bat-erdene@tms.mn", "Software Engineering", "SE");
+        User user = new User(100001L, UserRole.STUDENT, "22b1num0027", "Ану", "Бат-Эрдэнэ", "anu.bat-erdene@tms.mn", "99000001", "Software Engineering", "SE");
         Topic pendingTopic = new Topic(1L, "Topic A", "Desc", "SE", user.id(), user.fullName(), UserRole.STUDENT,
-                user.id(), user.fullName(), null, null, TopicStatus.PENDING_TEACHER_APPROVAL, now, now, List.of());
+                user.id(), user.fullName(), null, null, TopicStatus.PENDING_TEACHER_APPROVAL, now, now, new ArrayList<>());
         Topic approvedTopic = new Topic(2L, "Topic B", "Desc", "SE", user.id(), user.fullName(), UserRole.STUDENT,
-                user.id(), user.fullName(), 200001L, "Teacher One", TopicStatus.APPROVED, now, now, List.of());
+                user.id(), user.fullName(), 200001L, "Teacher One", TopicStatus.APPROVED, now, now, new ArrayList<>());
         Plan pendingPlan = new Plan(10L, 2L, "Topic B", user.id(), user.fullName(), PlanStatus.PENDING_TEACHER_APPROVAL, List.of(), List.of(), now, now);
         Review review = new Review(20L, 10L, 1, 200001L, "Teacher One", 95, "Good", now);
         Notification notification = new Notification(30L, user.id(), "Title", "Body", now);

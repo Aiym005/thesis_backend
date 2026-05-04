@@ -19,7 +19,7 @@ public final class ApiDtos {
 
     public record SummaryDto(long pendingTopics, long pendingPlans, long totalReviews) { }
 
-    public record UserDto(Long id, String role, String loginId, String firstName, String lastName, String email, String departmentName, String program) { }
+    public record UserDto(Long id, String role, String loginId, String firstName, String lastName, String email, String phoneNumber, String departmentName, String program) { }
 
     public record TopicDto(
             Long id,
@@ -64,6 +64,7 @@ public final class ApiDtos {
 
     public record TopicStateResponse(
             List<TopicDto> allTopics,
+            List<TopicDto> activeTopics,
             List<TopicDto> availableTopics,
             List<TopicDto> pendingTeacherApprovalTopics,
             List<TopicDto> pendingDepartmentApprovalTopics,
@@ -81,6 +82,8 @@ public final class ApiDtos {
     ) { }
 
     public record WorkflowStateResponse(List<UserDto> users, TopicStateResponse topics, PlanStateResponse plans) { }
+
+    public record StudentWorkspaceResponse(TopicDto studentTopic, PlanDto studentPlan) { }
 
     public record TopicActionResponse(TopicDto topic, WorkflowStateResponse state) { }
 

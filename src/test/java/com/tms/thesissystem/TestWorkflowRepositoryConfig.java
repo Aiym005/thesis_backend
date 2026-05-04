@@ -61,10 +61,10 @@ public class TestWorkflowRepositoryConfig {
         private void initializeFixture() {
             LocalDateTime now = LocalDateTime.now();
 
-            User student = new User(100001L, UserRole.STUDENT, "22b1num0027", "Ану", "Бат-Эрдэнэ", "anu.bat-erdene@tms.mn", DEPARTMENT_NAME, PROGRAM);
-            User teacherA = new User(200001L, UserRole.TEACHER, "tch001", "Энх", "Сүрэн", "enkh.suren@tms.mn", DEPARTMENT_NAME, PROGRAM);
-            User teacherB = new User(200002L, UserRole.TEACHER, "tch002", "Болор", "Наран", "bolor.naran@tms.mn", DEPARTMENT_NAME, PROGRAM);
-            User department = new User(300001L, UserRole.DEPARTMENT, "se-dept", "Програм", "админ", "sisi.admin@tms.mn", DEPARTMENT_NAME, PROGRAM);
+            User student = new User(100001L, UserRole.STUDENT, "22b1num0027", "Ану", "Бат-Эрдэнэ", "anu.bat-erdene@tms.mn", "99000001", DEPARTMENT_NAME, PROGRAM);
+            User teacherA = new User(200001L, UserRole.TEACHER, "tch001", "Энх", "Сүрэн", "enkh.suren@tms.mn", "99000002", DEPARTMENT_NAME, PROGRAM);
+            User teacherB = new User(200002L, UserRole.TEACHER, "tch002", "Болор", "Наран", "bolor.naran@tms.mn", "99000003", DEPARTMENT_NAME, PROGRAM);
+            User department = new User(300001L, UserRole.DEPARTMENT, "se-dept", "Програм", "админ", "sisi.admin@tms.mn", null, DEPARTMENT_NAME, PROGRAM);
 
             users.put(student.id(), student);
             users.put(teacherA.id(), teacherA);
@@ -86,7 +86,7 @@ public class TestWorkflowRepositoryConfig {
                     TopicStatus.APPROVED,
                     now.minusDays(6),
                     now.minusDays(5),
-                    List.of(new ApprovalRecord(ApprovalStage.DEPARTMENT, department.id(), department.fullName(), true, "Catalog approved", now.minusDays(5)))
+                    new ArrayList<>(List.of(new ApprovalRecord(ApprovalStage.DEPARTMENT, department.id(), department.fullName(), true, "Catalog approved", now.minusDays(5))))
             );
 
             Topic approvedCatalogTopicB = new Topic(
@@ -104,7 +104,7 @@ public class TestWorkflowRepositoryConfig {
                     TopicStatus.APPROVED,
                     now.minusDays(4),
                     now.minusDays(3),
-                    List.of(new ApprovalRecord(ApprovalStage.DEPARTMENT, department.id(), department.fullName(), true, "Catalog approved", now.minusDays(3)))
+                    new ArrayList<>(List.of(new ApprovalRecord(ApprovalStage.DEPARTMENT, department.id(), department.fullName(), true, "Catalog approved", now.minusDays(3))))
             );
 
             Topic approvedStudentTopic = new Topic(
@@ -122,10 +122,10 @@ public class TestWorkflowRepositoryConfig {
                     TopicStatus.APPROVED,
                     now.minusDays(10),
                     now.minusDays(8),
-                    List.of(
+                    new ArrayList<>(List.of(
                             new ApprovalRecord(ApprovalStage.TEACHER, teacherA.id(), teacherA.fullName(), true, "Teacher approved", now.minusDays(9)),
                             new ApprovalRecord(ApprovalStage.DEPARTMENT, department.id(), department.fullName(), true, "Department approved", now.minusDays(8))
-                    )
+                    ))
             );
 
             topics.put(approvedCatalogTopicA.getId(), approvedCatalogTopicA);
@@ -182,9 +182,9 @@ public class TestWorkflowRepositoryConfig {
             String resolvedLastName = (lastName == null || lastName.isBlank()) ? "User" : lastName;
             String resolvedPhoneNumber = (phoneNumber == null || phoneNumber.isBlank()) ? username : phoneNumber;
             User createdUser = switch (role) {
-                case STUDENT -> new User(studentSequence.getAndIncrement(), role, username, resolvedFirstName, resolvedLastName, username + "@tms.mn", DEPARTMENT_NAME, PROGRAM);
-                case TEACHER -> new User(teacherSequence.getAndIncrement(), role, username, resolvedFirstName, resolvedLastName, resolvedPhoneNumber, DEPARTMENT_NAME, PROGRAM);
-                case DEPARTMENT -> new User(departmentSequence.getAndIncrement(), role, username, resolvedFirstName, resolvedLastName, username + "@tms.mn", DEPARTMENT_NAME, PROGRAM);
+                case STUDENT -> new User(studentSequence.getAndIncrement(), role, username, resolvedFirstName, resolvedLastName, username + "@tms.mn", resolvedPhoneNumber, DEPARTMENT_NAME, PROGRAM);
+                case TEACHER -> new User(teacherSequence.getAndIncrement(), role, username, resolvedFirstName, resolvedLastName, username + "@tms.mn", resolvedPhoneNumber, DEPARTMENT_NAME, PROGRAM);
+                case DEPARTMENT -> new User(departmentSequence.getAndIncrement(), role, username, resolvedFirstName, resolvedLastName, username + "@tms.mn", null, DEPARTMENT_NAME, PROGRAM);
             };
             users.put(createdUser.id(), createdUser);
             return createdUser;

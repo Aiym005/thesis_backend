@@ -46,6 +46,11 @@ public class ApiResponseMapper {
                 snapshot.users().stream().map(this::toUserDto).toList(),
                 new ApiDtos.TopicStateResponse(
                         topics,
+                        topics.stream()
+                                .filter(topic -> !"DELETED".equals(topic.status()))
+                                .filter(topic -> !"SUPERSEDED".equals(topic.status()))
+                                .filter(topic -> !"REJECTED".equals(topic.status()))
+                                .toList(),
                         filterTopics(topics, TopicStatus.AVAILABLE),
                         filterTopics(topics, TopicStatus.PENDING_TEACHER_APPROVAL),
                         filterTopics(topics, TopicStatus.PENDING_DEPARTMENT_APPROVAL),
@@ -63,8 +68,15 @@ public class ApiResponseMapper {
         );
     }
 
+    public ApiDtos.StudentWorkspaceResponse toStudentWorkspaceResponse(WorkflowQueryService.StudentWorkspace workspace) {
+        return new ApiDtos.StudentWorkspaceResponse(
+                workspace.topic() == null ? null : toTopicDto(workspace.topic()),
+                workspace.plan() == null ? null : toPlanDto(workspace.plan())
+        );
+    }
+
     public ApiDtos.UserDto toUserDto(User user) {
-        return new ApiDtos.UserDto(user.id(), user.role().name(), user.loginId(), user.firstName(), user.lastName(), user.email(), user.departmentName(), user.program());
+        return new ApiDtos.UserDto(user.id(), user.role().name(), user.loginId(), user.firstName(), user.lastName(), user.email(), user.phoneNumber(), user.departmentName(), user.program());
     }
 
     public ApiDtos.TopicDto toTopicDto(Topic topic) {

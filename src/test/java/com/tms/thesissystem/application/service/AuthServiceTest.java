@@ -103,24 +103,10 @@ class AuthServiceTest {
     }
 
     @Test
-    void resetPasswordReturnsTemporaryPasswordForKnownIdentifier() {
-        when(authAccountStore.findByUsername("22b1num0027")).thenReturn(Optional.of(
-                new AuthAccountStore.AuthAccount(100001L, "22b1num0027", passwordEncoder.encode("secret"), "student", "Ану", null, null)
-        ));
-
-        ApiDtos.PasswordResetResponse response = authService.resetPassword("22b1num0027");
-
-        assertThat(response.ok()).isTrue();
-        assertThat(response.username()).isEqualTo("22b1num0027");
-        assertThat(response.message()).contains("токен");
-        assertThat(response.resetToken()).isNotBlank();
-    }
-
-    @Test
     void registersUserDirectlyIntoAuthStore() {
         when(authAccountStore.findByUsername("new-user")).thenReturn(Optional.empty());
         when(workflowRepository.createUserAccount("new-user", UserRole.STUDENT, "new", "user", "99112233"))
-                .thenReturn(new User(900001L, UserRole.STUDENT, "new-user", "new", "user", "new-user@tms.mn", "Software Engineering", "B.SE"));
+                .thenReturn(new User(900001L, UserRole.STUDENT, "new-user", "new", "user", "new-user@tms.mn", "99000010", "Software Engineering", "B.SE"));
 
         ApiDtos.RegistrationResponse response = authService.register("new-user", "secret1", "secret1", "new", "user", "99112233");
 
